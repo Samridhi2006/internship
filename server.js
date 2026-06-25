@@ -14,6 +14,8 @@ const cors = require("cors");
 const interviewRoutes = require("./routes/interviewRoutes");
 const placementRoutes = require("./routes/placementRoutes");
 const recruiterRoutes = require("./routes/recruiterRoutes");
+const arenaRoutes = require("./routes/arenaRoutes");
+
 
 // ─────────────────────────────────────────────
 // Configuration
@@ -56,6 +58,10 @@ app.use("/api/placement", placementRoutes);
 
 // Mount recruiter session API routes
 app.use("/api/recruiter", recruiterRoutes);
+
+// Mount arena API routes
+app.use("/api/arena", arenaRoutes);
+
 
 // 404 catch-all
 app.use((_req, res) => {

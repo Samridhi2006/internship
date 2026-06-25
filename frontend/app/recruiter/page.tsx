@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 type Company = 'Google' | 'Amazon' | 'Microsoft' | 'TCS' | 'Infosys' | 'Startup';
 type Difficulty = 'Easy' | 'Medium' | 'Hard';
@@ -511,6 +512,18 @@ function ParamBar({ label, value, delay }: { label: string; value: string; delay
 }
 
 export default function RecruiterSimulatorPage() {
+  const router = useRouter();
+  const [isAuthorized, setIsAuthorized] = useState(false);
+
+  useEffect(() => {
+    const isLoggedIn = localStorage.getItem("isLoggedIn");
+    if (!isLoggedIn) {
+      router.push("/login");
+    } else {
+      setIsAuthorized(true);
+    }
+  }, [router]);
+
   const [view, setView] = useState<View>('select');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [selectedRole, setSelectedRole] = useState('');
@@ -594,6 +607,10 @@ export default function RecruiterSimulatorPage() {
 
   const cfg = selectedCompany ? COMPANY_CONFIG[selectedCompany] : null;
 
+  if (!isAuthorized) {
+    return null;
+  }
+
   if (view === 'select') {
     return (
       <div className="min-h-screen bg-[#06060F] text-white overflow-x-hidden" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
@@ -610,17 +627,20 @@ export default function RecruiterSimulatorPage() {
             </div>
             
             <nav className="flex items-center gap-6">
-              <Link href="/" className="text-sm font-semibold text-white/50 hover:text-white transition-colors">
+              <Link href="/" className="text-sm font-medium text-white/50 hover:text-white transition-colors">
                 🏠 Home
               </Link>
               <Link href="/recruiter" className="text-sm font-semibold text-white border-b-2 border-fuchsia-500 pb-1 px-1 transition-colors">
-                🚀 Recruiter Arena
+                🚀 Recruiter
+              </Link>
+              <Link href="/arena" className="text-sm font-medium text-white/50 hover:text-cyan-400 transition-colors">
+                🎮 Peer Arena
               </Link>
               <Link href="/interview" className="text-sm font-medium text-white/50 hover:text-indigo-400 transition-colors">
-                🎤 Mock Interview
+                🎤 Interview
               </Link>
               <Link href="/placement" className="text-sm font-medium text-white/50 hover:text-cyan-400 transition-colors">
-                📊 Placement Hub
+                📊 Placement
               </Link>
             </nav>
           </div>

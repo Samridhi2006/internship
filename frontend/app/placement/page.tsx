@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -378,6 +379,18 @@ function EvaluationBreakdown({ evaluation }: { evaluation: Evaluation }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PlacementReadinessPage() {
+  const router = useRouter();
+  const [isAuthorized, setIsAuthorized] = useState(false);
+
+  useEffect(() => {
+    const isLoggedIn = localStorage.getItem("isLoggedIn");
+    if (!isLoggedIn) {
+      router.push("/login");
+    } else {
+      setIsAuthorized(true);
+    }
+  }, [router]);
+
   const [candidateType, setCandidateType] = useState<CandidateType>("fresher");
   const [scores, setScores] = useState<Scores>({
     resumeScore: 60,
@@ -415,6 +428,10 @@ export default function PlacementReadinessPage() {
   useEffect(() => {
     fetchHistory();
   }, []);
+
+  if (!isAuthorized) {
+    return null;
+  }
 
   const handleSubmit = async () => {
     setLoading(true);

@@ -21,6 +21,23 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { SplineScene } from "@/components/ui/splite";
 import { Spotlight } from "@/components/ui/spotlight-aceternity";
 
+// Helper to decode JWT token client-side
+const decodeJwt = (token) => {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      window.atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+};
+
 // ─────────────────────────────────────────────
 // Sub-components
 // ─────────────────────────────────────────────
@@ -98,7 +115,7 @@ const DiffArrow = ({ from, to }) => {
 function AdaptiveInterview({
   candidateId = "anonymous",
   totalQs = 10,
-  apiBase = "http://localhost:5000/api/interview",
+  apiBase = "http://localhost:4000/api/interview",
 }) {
   // ── State ──────────────────────────────────
   const [view, setView] = useState("init"); // "init" | "loading" | "question" | "evaluating" | "report"
@@ -119,8 +136,13 @@ function AdaptiveInterview({
 
   // ── API helpers ────────────────────────────
   const apiFetch = useCallback(async (path, options = {}) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const headers = { 
+      "Content-Type": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {})
+    };
     const res = await fetch(`${apiBase}${path}`, {
-      headers: { "Content-Type": "application/json" },
+      headers,
       ...options,
     });
     const data = await res.json();
@@ -194,7 +216,7 @@ function AdaptiveInterview({
           answer: isSkip ? "" : answer.trim(),
         };
 
-        const data = await apiFetch("/submit-answer", {
+        const data = await apiFetch("/evaluate", {
           method: "POST",
           body: JSON.stringify(payload),
         });
@@ -271,10 +293,16 @@ function AdaptiveInterview({
         {view !== "report" && (
           <header className="mb-10 animate-fade-in">
             <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs uppercase tracking-widest text-zinc-500 font-medium">
-                  Adaptive Interview Engine
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-xs uppercase tracking-widest text-zinc-500 font-medium">
+                    Adaptive Interview Engine
+                  </span>
+                </div>
+                <span className="text-zinc-850 text-xs hidden sm:inline">|</span>
+                <span className="text-xs font-semibold text-emerald-400">
+                  Identity: {candidateId || "Samridhi T."}
                 </span>
               </div>
               {sessionId && (
@@ -469,6 +497,33 @@ function AdaptiveInterview({
               />
             </div>
 
+            {/* AI Evaluation Metrics Breakdown */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-5 sm:p-6 shadow-md backdrop-blur-md space-y-4">
+              <h2 className="text-xs uppercase tracking-widest text-zinc-500 mb-2">
+                AI Performance Parameter Breakdown
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[
+                  { label: "Technical Accuracy", value: analytics.averageTechnicalAccuracy || 0, color: "from-emerald-500 to-teal-400" },
+                  { label: "Communication Clarity", value: analytics.averageCommunicationClarity || 0, color: "from-emerald-500 to-teal-400" },
+                  { label: "Role Relevance", value: analytics.averageRoleRelevance || 0, color: "from-emerald-500 to-teal-400" }
+                ].map((metric) => (
+                  <div key={metric.label} className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400 font-medium">{metric.label}</span>
+                      <span className="font-mono font-bold text-emerald-400">{metric.value}%</span>
+                    </div>
+                    <div className="h-2 bg-slate-950 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full bg-gradient-to-r ${metric.color} rounded-full transition-all duration-1000`}
+                        style={{ width: `${metric.value}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Score trajectory bar chart (pure CSS) */}
             <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-5 sm:p-6 shadow-md backdrop-blur-md">
               <h2 className="text-xs uppercase tracking-widest text-zinc-500 mb-5">
@@ -626,14 +681,22 @@ function InterviewContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const candidateId = searchParams.get("candidateId") || "";
+  const [candidateId, setCandidateId] = useState("");
   const totalQs = Number(searchParams.get("totalQs")) || 10;
 
-  // Protect route - if name is not set, redirect back to login
+  // Protect route - if token is not set, redirect back to login
   useEffect(() => {
-    if (!searchParams.get("candidateId")) {
+    const token = localStorage.getItem("token");
+    if (!token) {
       router.push("/login");
+      return;
     }
+    const decoded = decodeJwt(token);
+    if (!decoded || !decoded.name) {
+      router.push("/login");
+      return;
+    }
+    setCandidateId(decoded.name);
   }, [searchParams, router]);
 
   if (!candidateId) {
