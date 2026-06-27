@@ -78,7 +78,7 @@ type HistoryPoint = {
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:5000/api/placement";
+const API_BASE = "/api/placement";
 
 const SCORE_LABELS: Record<keyof Scores, string> = {
   resumeScore: "Resume",
@@ -120,8 +120,27 @@ const CANDIDATE_LABELS: Record<CandidateType, string> = {
   experienced: "Experienced",
 };
 
-// Hard-coded demo userId — replace with your auth context value
-const DEMO_USER_ID = "6659f3a1c2e4b8a5d1234abc";
+const getAuthUser = () => {
+  if (typeof window !== "undefined") {
+    const raw = localStorage.getItem("authUser");
+    if (raw) return JSON.parse(raw);
+  }
+  return null;
+};
+
+const user = getAuthUser();
+const token = user?.token;
+const userId = user?.id || user?._id || "000000000000000000000000"; // Fallback to our failsafe ID
+const DEMO_USER_ID = userId; // resolved dynamically via getAuthUserId()
+
+function getAuthUserId(): string {
+  return userId;
+}
+
+function getAuthToken(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("token") || token || "";
+}
 
 // ─── SVG History Chart ────────────────────────────────────────────────────────
 function HistoryChart({ history }: { history: HistoryPoint[] }) {
@@ -417,9 +436,12 @@ export default function PlacementReadinessPage() {
 
   const fetchHistory = async () => {
     try {
-      const res = await fetch(`${API_BASE}/history/${DEMO_USER_ID}`);
+      const userId = getAuthUserId();
+      const res = await fetch(`${API_BASE}/history/${userId}`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
       const json = await res.json();
-      if (json.success) setHistory(json.data);
+      if (json.success && json.data?.history) setHistory(json.data.history);
     } catch {
       // Silent — history is supplementary
     }
@@ -437,10 +459,24 @@ export default function PlacementReadinessPage() {
     setLoading(true);
     setError(null);
     try {
+      const userId = getAuthUserId();
+      const token = getAuthToken();
       const res = await fetch(`${API_BASE}/evaluate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: DEMO_USER_ID, candidateType, scores }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          userId,
+          candidateType,
+          skillScores: {
+            technical: scores.technicalSkillScore,
+            communication: scores.communicationScore,
+            aptitude: Math.round((scores.technicalSkillScore + scores.communicationScore) / 2),
+          },
+          scores,
+        }),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.message || "Evaluation failed.");

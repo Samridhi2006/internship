@@ -171,9 +171,21 @@ export default function EntryLoginPage() {
     <div 
       className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden select-none"
       style={{
-        background: "linear-gradient(160deg, #030718 0%, #060d2e 40%, #0a0a35 100%)",
+        background: "linear-gradient(160deg, #030718ee 0%, #060d2e 40%, #0a0a35dd 100%)",
       }}
     >
+      {/* ─── PERSISTENT BACKGROUND IMAGE OVERLAY ─── */}
+      <div
+        className="absolute inset-0 pointer-events-none z-0"
+        style={{
+          backgroundImage: "url('/image_c13234.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          opacity: 0.18,
+        }}
+      />
+
       {/* Floating Canvas Particles */}
       <canvas id="particle-canvas" className="absolute inset-0 w-full h-full pointer-events-none z-0" />
 

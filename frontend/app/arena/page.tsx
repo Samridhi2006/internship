@@ -23,6 +23,7 @@ interface Peer {
   losses: number;
   winRate: number;
   badgeCount: number;
+  isUser?: boolean;
 }
 
 interface Badge {
@@ -82,6 +83,7 @@ interface HUDState {
   positionDelta: number;
   badgeVault: Badge[];
   completedChallengeIds: string[];
+  displayName?: string;
 }
 
 interface TerminalLine {
@@ -91,9 +93,38 @@ interface TerminalLine {
 
 // ─── API Configuration ────────────────────────────────────────────────────────
 
-const API_BASE = "http://localhost:4000/api/arena";
-const DEMO_USER_ID = "64f3a2b1c2d4e5f6a7b8c9d0"; // Aligns with seed databases
-const DEMO_DISPLAY_NAME = "Samridhi T.";
+const API_BASE = "/api/arena";
+
+const getAuthUser = () => {
+  if (typeof window !== "undefined") {
+    const raw = localStorage.getItem("authUser");
+    if (raw) return JSON.parse(raw);
+  }
+  return null;
+};
+
+const user = getAuthUser();
+const token = user?.token;
+const userId = user?.id || user?._id || "000000000000000000000000"; // Fallback to our failsafe ID
+const DEMO_USER_ID = userId; // resolved dynamically via getArenaUserId()
+
+function getArenaUserId(): string {
+  return userId;
+}
+
+function getArenaDisplayName(): string {
+  if (typeof window === "undefined") return "Agent";
+  try {
+    const raw = localStorage.getItem("authUser");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return parsed.name || "Agent";
+    }
+  } catch {}
+  return "Agent";
+}
+
+const DEMO_DISPLAY_NAME = ""; // resolved at runtime via getArenaDisplayName()
 
 // ─── Visual Constants ─────────────────────────────────────────────────────────
 
@@ -302,7 +333,7 @@ function ChallengeWorkspace({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           challengeId: challenge._id,
-          userId: DEMO_USER_ID,
+          userId: getArenaUserId(),
           submissionType: "code",
           payload: { source: codeSource, language: "javascript" },
           dryRun: true
@@ -348,7 +379,7 @@ function ChallengeWorkspace({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           challengeId: challenge._id,
-          userId: DEMO_USER_ID,
+          userId: getArenaUserId(),
           displayName: DEMO_DISPLAY_NAME,
           submissionType,
           payload,
@@ -616,7 +647,7 @@ function Leaderboard({ users }: { users: Peer[] }) {
 
       <div className="space-y-2 overflow-y-auto max-h-[360px] scrollbar-none pr-1">
         {filtered.map((peer) => {
-          const isUser = peer.userId === DEMO_USER_ID;
+          const isUser = peer.userId === getArenaUserId();
           const color = TIERS[peer.rankName] ?? "#00e5ff";
 
           let rowClass = "text-slate-450 bg-transparent border-transparent";
@@ -705,7 +736,7 @@ export default function ArenaPage() {
   const fetchChallenges = useCallback(async () => {
     setLoadingChallenges(true);
     try {
-      const res = await fetch(`${API_BASE}/challenges?category=${category}&userId=${DEMO_USER_ID}`);
+      const res = await fetch(`${API_BASE}/challenges?category=${category}&userId=${getArenaUserId()}`);
       const data = await res.json();
       if (res.ok && data.challenges) {
         setChallenges(data.challenges);
@@ -720,7 +751,7 @@ export default function ArenaPage() {
   const fetchTelemetry = useCallback(async () => {
     setLoadingTelemetry(true);
     try {
-      const statusRes = await fetch(`${API_BASE}/status?userId=${DEMO_USER_ID}&displayName=${encodeURIComponent(DEMO_DISPLAY_NAME)}`);
+      const statusRes = await fetch(`${API_BASE}/status?userId=${getArenaUserId()}&displayName=${encodeURIComponent(getArenaDisplayName())}`);
       const statusData = await statusRes.json();
       if (statusRes.ok) {
         setHud(statusData);
@@ -1055,7 +1086,7 @@ export default function ArenaPage() {
             <div className="relative backdrop-blur-md bg-slate-900/40 border border-slate-800 rounded-lg p-5">
               <div className="text-xs text-slate-505 font-bold uppercase tracking-wider">Identity</div>
               <div className="text-lg font-bold text-white tracking-wide mt-0.5">
-                {hud?.displayName || DEMO_DISPLAY_NAME}
+                {hud?.displayName || getArenaDisplayName()}
               </div>
               <div className="text-[10px] font-mono text-cyan-500/70 mt-1">Biometric line patterns verified</div>
             </div>

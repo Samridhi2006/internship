@@ -27,6 +27,18 @@ interface AuthUser {
   token: string;
 }
 
+const getAuthUser = () => {
+  if (typeof window !== "undefined") {
+    const raw = localStorage.getItem("authUser");
+    if (raw) return JSON.parse(raw);
+  }
+  return null;
+};
+
+const user = getAuthUser();
+const token = user?.token;
+const userId = user?.id || user?._id || "000000000000000000000000"; // Fallback to our failsafe ID
+
 export default function UnifiedHubPortal() {
   const router = useRouter();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -68,7 +80,7 @@ export default function UnifiedHubPortal() {
     } else {
       const formattedRole = currentRole.charAt(0).toUpperCase() + currentRole.slice(1);
       setModalMessage(
-        `[403 FORBIDDEN] Access Denied. Your current profile '${formattedRole}' does not possess the higher-order cryptographic keys required to operate this interface.`
+        `[403 FORBIDDEN] Access Denied. Your current active profile '${formattedRole}' does not possess the higher-order cryptographic keys required to operate this core database module.`
       );
       setIsModalOpen(true);
 
@@ -91,40 +103,58 @@ export default function UnifiedHubPortal() {
 
   const modules = [
     {
-      id: "assessments",
-      name: "Skill Assessments",
-      path: "/placement",
-      roles: ["student", "mentor", "admin"],
-      icon: "📊",
-      tech: "SVG Profile Progression Blueprint Engine",
-      desc: "Assess composite profile scores, map historical development curves, and review dynamic learning blueprints."
-    },
-    {
       id: "interview",
-      name: "Task 1: AI Interview",
+      name: "Adaptive Interview Engine",
       path: "/interview",
       roles: ["student", "mentor", "admin"],
       icon: "🎤",
-      tech: "Real-time AI Grading Grader Engine",
-      desc: "Engage in adaptive technical interview conversations with automated grading metrics calculated at runtime."
+      tech: "Task 1 — Dynamic Difficulty Branching Engine",
+      desc: "Engage in adaptive technical interview sessions with AI-powered real-time grading, difficulty branching, and skip-loop detection."
+    },
+    {
+      id: "placement",
+      name: "AI Placement Readiness",
+      path: "/readiness",
+      roles: ["student", "mentor", "admin"],
+      icon: "📊",
+      tech: "Task 2 — Composite Readiness Scoring Engine",
+      desc: "Upload your resume, assess composite readiness scores with 30/40/30 weighting, and receive a personalized learning roadmap."
+    },
+    {
+      id: "recruiter",
+      name: "AI Recruiter Simulator",
+      path: "/recruiter",
+      roles: ["student", "mentor", "admin"],
+      icon: "🚀",
+      tech: "Task 3 — Company-Profile Calibrated Simulator",
+      desc: "Enter simulated corporate interview rooms for Google, Amazon, Microsoft, TCS, and Infosys with adaptive difficulty vectors."
+    },
+    {
+      id: "arena",
+      name: "Peer Challenge Arena",
+      path: "/arena",
+      roles: ["student", "mentor", "admin"],
+      icon: "⚔️",
+      tech: "Task 4 — Gamified Leaderboard & XP Engine",
+      desc: "Compete in live Technical, Aptitude, and Domain challenges. Track XP, streaks, win rates, and milestone achievement badges."
     },
     {
       id: "telemetry",
-      name: "Task 5: Live System Telemetry",
+      name: "Security Management Logs",
       path: "/security",
       roles: ["mentor", "admin"],
       icon: "⚙️",
-      tech: "Active Sessions Telemetry Audit Monitor",
-      desc: "Monitor active sessions, stream user logs in real-time, inspect suspicious events, and revoke credentials."
+      tech: "Task 5 — Enterprise Session Telemetry Monitor",
+      desc: "Monitor active sessions, stream security audit logs, inspect suspicious login events, and revoke compromised credentials."
     },
     {
       id: "admin",
-      name: "Task 6: Admin Security Console",
+      name: "Admin Control Console",
       path: "/admin",
       roles: ["admin"],
       icon: "🛡️",
-      tech: "Role-Based Access Control Audit Center",
-      desc: "Gated dashboard to manage users, update system security settings, search logs, and modify active roles."
+      tech: "Task 6 — Role-Based Access Control Audit Center",
+      desc: "Manage all users, modify RBAC roles, stream global security logs, and execute platform-wide administrative operations."
     }
   ];
 
@@ -138,6 +168,35 @@ export default function UnifiedHubPortal() {
 
   return (
     <div className="min-h-screen bg-[#020205] text-slate-100 flex relative overflow-hidden select-none">
+      
+      {/* ─── PERSISTENT BACKGROUND IMAGE OVERLAY ─── */}
+      <div
+        className="fixed inset-0 pointer-events-none z-0"
+        style={{
+          backgroundImage: "url('/image_c13234.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          opacity: 0.18,
+        }}
+      />
+
+      {/* ─── SIGNATURE GRADIENT OVERLAY (on top of image) ─── */}
+      <div
+        className="fixed inset-0 pointer-events-none z-0"
+        style={{
+          background: "linear-gradient(160deg, #030718ee 0%, #060d2e 40%, #0a0a35dd 100%)",
+        }}
+      />
+
+      {/* ─── THIN GRID-SCANLINE OVERLAY ─── */}
+      <div
+        className="fixed inset-0 pointer-events-none z-0 opacity-[0.025]"
+        style={{
+          backgroundImage: "linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%)",
+          backgroundSize: "100% 4px",
+        }}
+      />
       
       {/* ─── DYNAMIC BACKGROUND GRID AND GLOWS ─── */}
       <div className="fixed inset-0 pointer-events-none z-0">

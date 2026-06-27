@@ -16,6 +16,7 @@ import authRoutes from './routes/authRoutes.js';
 import securityRoutes from './routes/securityRoutes.js';
 import interviewRoutes from './routes/interviewRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import placementRoutes from './routes/placementRoutes.js';
 import { login } from './controllers/authController.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import { generateChallenges } from './services/groqService.js';
@@ -58,6 +59,8 @@ coreRouter.use('/arena', arenaRoutes);
 coreRouter.use('/recruiter', recruiterRoutes);
 coreRouter.use('/interview', interviewRoutes);
 coreRouter.use('/admin', adminRoutes);
+coreRouter.use('/placement', placementRoutes);
+coreRouter.use('/readiness', placementRoutes);
 
 app.use('/api', coreRouter);
 
