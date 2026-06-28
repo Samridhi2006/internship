@@ -260,9 +260,9 @@ Example output:
 
 // ─── Helper: Generate personalized roadmap via Groq ──────────────────────────
 
-async function generateRoadmapGroq(candidateType, weakAreas, missingSkills, classification) {
+async function generateRoadmapGroq(candidateType, weakAreas, missingSkills, classification, history = []) {
   if (!process.env.GROQ_API_KEY) {
-    return generateRoadmapFallback(candidateType, weakAreas, missingSkills);
+    return generateRoadmapFallback(candidateType, weakAreas, missingSkills, history);
   }
 
   const systemPrompt = `
@@ -275,20 +275,24 @@ Rules:
    - "projects": array of 3-5 specific project ideas to build for portfolio
    - "certifications": array of 3-4 specific certifications to pursue
    - "interviewTopics": array of 4-6 specific interview preparation topics
-3. Tailor recommendations to the candidate type and their weak areas.
-4. Be specific — name actual technologies, certifications, and project ideas.
-
-Example:
-{"technologies":["React.js","System Design","Docker"],"projects":["Full-stack E-commerce App","REST API with Auth"],"certifications":["AWS Cloud Practitioner","Meta Front-End Developer"],"interviewTopics":["Binary Trees","Dynamic Programming","System Design Basics"]}
+3. Tailor recommendations to the candidate type, classification, and weak areas.
+4. IMPORTANT: If the candidate has historical evaluations showing score improvements, evolve the recommendations to be more advanced (e.g., system design, architecture, advanced tools) instead of simple basics.
+5. Be specific — name actual technologies, certifications, and project ideas.
 `.trim();
+
+  const scoreTrend = history.length > 0 ? history.map(h => h.compositeScore).reverse().join(" -> ") : "First Run";
 
   const userPrompt = `
 Candidate Type: ${candidateType}
 Classification: ${classification}
 Weak Technical Areas: ${weakAreas.join(", ") || "None identified"}
 Missing Industry Skills: ${missingSkills.join(", ") || "None identified"}
+Historical Progression:
+- Previous Sessions Completed: ${history.length}
+- Score History Trend: ${scoreTrend}
+- Last Score: ${history[0]?.compositeScore || "None"}
 
-Generate a tailored roadmap.
+Generate an evolved roadmap showing clear progression.
 `.trim();
 
   try {
@@ -316,13 +320,13 @@ Generate a tailored roadmap.
     };
   } catch (err) {
     console.error("[placementController] Groq roadmap generation failed:", err.message);
-    return generateRoadmapFallback(candidateType, weakAreas, missingSkills);
+    return generateRoadmapFallback(candidateType, weakAreas, missingSkills, history);
   }
 }
 
 // ─── Helper: Fallback roadmap generation (no Groq) ───────────────────────────
 
-function generateRoadmapFallback(candidateType, weakAreas, missingSkills) {
+function generateRoadmapFallback(candidateType, weakAreas, missingSkills, history = []) {
   const roadmaps = {
     fresher: {
       technologies: ["JavaScript ES6+", "React.js", "Node.js & Express", "MongoDB", "Git & GitHub", "REST API Design"],
@@ -344,7 +348,39 @@ function generateRoadmapFallback(candidateType, weakAreas, missingSkills) {
     },
   };
 
-  return roadmaps[candidateType] || roadmaps.fresher;
+  const roadmap = JSON.parse(JSON.stringify(roadmaps[candidateType] || roadmaps.fresher));
+
+  // If candidate has historical evaluations, progress/evolve their roadmap
+  if (history.length > 0) {
+    const lastRun = history[0];
+    const prevScore = lastRun.compositeScore || 50;
+
+    if (prevScore >= 75) {
+      // Evolve to advanced roadmap
+      if (candidateType === "fresher") {
+        roadmap.technologies = ["TypeScript", "Next.js & SSR", "GraphQL & Apollo", "Docker Containerization", ...roadmap.technologies.slice(4)];
+        roadmap.projects = ["SaaS Project Management Tool", "Collaborative Code Editor Workspace", ...roadmap.projects.slice(2)];
+        roadmap.certifications = ["AWS Cloud Practitioner", "HashiCorp Terraform Associate"];
+        roadmap.interviewTopics = ["System Design Fundamentals", "State Management Redux/Zustand", ...roadmap.interviewTopics.slice(2)];
+      } else if (candidateType === "internship_seeker") {
+        roadmap.technologies = ["Kubernetes", "Redis Caching", "Kafka Stream Processing", ...roadmap.technologies.slice(3)];
+        roadmap.projects = ["Distributed Rate Limiting Gateway", "High-Throughput Analytics Dashboard", ...roadmap.projects.slice(2)];
+        roadmap.certifications = ["AWS Solutions Architect Associate", "Certified Kubernetes Application Developer"];
+        roadmap.interviewTopics = ["Microservices Routing Patterns", "SQL Transaction Isolation Levels", ...roadmap.interviewTopics.slice(2)];
+      }
+    } else if (prevScore >= 55) {
+      // Evolve to intermediate topics
+      if (candidateType === "fresher") {
+        roadmap.technologies = ["TypeScript Basics", "Advanced Async/Await", "Express Middleware Patterns", ...roadmap.technologies.slice(3)];
+        roadmap.projects = ["Real-time Multiuser Chat App", ...roadmap.projects.slice(1)];
+      }
+    }
+    
+    // Inject progress tracking node
+    roadmap.interviewTopics.unshift(`Evolved Goal: Completed ${history.length} iterations (Prior Peak: ${prevScore}%)`);
+  }
+
+  return roadmap;
 }
 
 // ─── Helper: Identify weak areas from scores ─────────────────────────────────
@@ -547,11 +583,22 @@ export async function evaluatePlacementReadiness(req, res) {
     };
 
     // ── 7. Generate personalized roadmap ────────────────────────────────────
+    let history = [];
+    try {
+      history = await PlacementReadiness.find({ userId })
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean();
+    } catch (historyErr) {
+      console.warn("[evaluatePlacementReadiness] History load error:", historyErr.message);
+    }
+
     const personalizedRoadmap = await generateRoadmapGroq(
       validCandidateType,
       weakTechnicalAreas,
       resumeData.missingSkills,
-      readinessClassification
+      readinessClassification,
+      history
     );
 
     // ── 8. Persist to database ──────────────────────────────────────────────
