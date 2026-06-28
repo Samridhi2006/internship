@@ -1,19 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   BrainCircuit,
   Zap,
@@ -24,9 +16,13 @@ import {
   BadgeCheck,
   MessageSquare,
   Loader2,
-  BarChart3,
   Target,
   ChevronRight,
+  UploadCloud,
+  FileText,
+  AlertCircle,
+  Clock,
+  ShieldAlert
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -65,6 +61,17 @@ type EvaluationResult = {
   evaluation: Evaluation;
   readinessClassification: Classification;
   personalizedRoadmap: Roadmap;
+  interviewMetrics?: {
+    sessionCount: number;
+    avgTechnicalAccuracy: number;
+    avgCommunicationClarity: number;
+    avgRoleRelevance: number;
+  };
+  resumeEntities?: {
+    technologies: string[];
+    projects: string[];
+    missingSkills: string[];
+  };
   timestamp: string;
 };
 
@@ -78,18 +85,18 @@ type HistoryPoint = {
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const API_BASE = "/api/placement";
+const API_BASE = "/api/readiness";
 
 const SCORE_LABELS: Record<keyof Scores, string> = {
-  resumeScore: "Resume",
-  interviewScore: "Interview",
-  technicalSkillScore: "Technical Skills",
-  communicationScore: "Communication",
+  resumeScore: "Resume Score",
+  interviewScore: "Interview Analytics",
+  technicalSkillScore: "Skill Assessments",
+  communicationScore: "Communication Clarity",
 };
 
 const CLASSIFICATION_CONFIG: Record<
   Classification,
-  { color: string; glow: string; ring: string; label: string; dot: string }
+  { color: string; glow: string; ring: string; label: string; dot: string; bg: string }
 > = {
   "Placement Ready": {
     color: "text-emerald-400",
@@ -97,6 +104,7 @@ const CLASSIFICATION_CONFIG: Record<
     ring: "border-emerald-500/40",
     label: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
     dot: "bg-emerald-400",
+    bg: "bg-emerald-950/20"
   },
   "Needs Improvement": {
     color: "text-amber-400",
@@ -104,22 +112,25 @@ const CLASSIFICATION_CONFIG: Record<
     ring: "border-amber-500/40",
     label: "bg-amber-500/15 text-amber-400 border-amber-500/30",
     dot: "bg-amber-400",
+    bg: "bg-amber-950/20"
   },
   "High Potential Candidate": {
-    color: "text-violet-400",
-    glow: "shadow-violet-500/30",
-    ring: "border-violet-500/40",
-    label: "bg-violet-500/15 text-violet-400 border-violet-500/30",
-    dot: "bg-violet-400",
+    color: "text-cyan-400",
+    glow: "shadow-cyan-500/30",
+    ring: "border-cyan-500/40",
+    label: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
+    dot: "bg-cyan-400",
+    bg: "bg-cyan-950/20"
   },
 };
 
 const CANDIDATE_LABELS: Record<CandidateType, string> = {
   fresher: "Fresher",
   internship_seeker: "Internship Seeker",
-  experienced: "Experienced",
+  experienced: "Experienced Professional",
 };
 
+// ─── Standard Auth Helpers ────────────────────────────────────────────────────
 const getAuthUser = () => {
   if (typeof window !== "undefined") {
     const raw = localStorage.getItem("authUser");
@@ -128,382 +139,368 @@ const getAuthUser = () => {
   return null;
 };
 
-const user = getAuthUser();
-const token = user?.token;
-const userId = user?.id || user?._id || "000000000000000000000000"; // Fallback to our failsafe ID
-const DEMO_USER_ID = userId; // resolved dynamically via getAuthUserId()
-
-function getAuthUserId(): string {
-  return userId;
-}
-
-function getAuthToken(): string {
-  if (typeof window === "undefined") return "";
-  return localStorage.getItem("token") || token || "";
-}
-
-// ─── SVG History Chart ────────────────────────────────────────────────────────
+// ─── SVG History Line Chart ──────────────────────────────────────────────────
 function HistoryChart({ history }: { history: HistoryPoint[] }) {
-  const svgRef = useRef<SVGSVGElement>(null);
   const W = 700;
-  const H = 180;
-  const PAD = { top: 16, right: 24, bottom: 36, left: 40 };
+  const H = 200;
+  const PAD = { top: 20, right: 30, bottom: 40, left: 50 };
 
   if (history.length < 2) {
     return (
-      <div className="flex items-center justify-center h-[180px] text-slate-500 text-sm">
-        Submit at least 2 evaluations to view trend graph.
+      <div className="flex items-center justify-center h-[200px] text-slate-500 text-sm font-mono border border-slate-800/40 rounded-lg bg-slate-950/20">
+        Requires at least 2 historical runs to graph trend timeline.
       </div>
     );
   }
 
-  const scores = history.map((h) => h.compositeScore);
-  const minS = Math.min(...scores) - 5;
-  const maxS = Math.max(...scores) + 5;
-
-  const xScale = (i: number) =>
-    PAD.left + (i / (history.length - 1)) * (W - PAD.left - PAD.right);
-  const yScale = (v: number) =>
-    H - PAD.bottom - ((v - minS) / (maxS - minS)) * (H - PAD.top - PAD.bottom);
-
-  const pathD = history
-    .map((h, i) => `${i === 0 ? "M" : "L"} ${xScale(i)} ${yScale(h.compositeScore)}`)
-    .join(" ");
-
-  const areaD =
-    pathD +
-    ` L ${xScale(history.length - 1)} ${H - PAD.bottom} L ${xScale(0)} ${H - PAD.bottom} Z`;
-
-  const classColor = (c: Classification) => {
-    if (c === "Placement Ready") return "#34d399";
-    if (c === "High Potential Candidate") return "#a78bfa";
-    return "#fbbf24";
-  };
-
-  return (
-    <svg
-      ref={svgRef}
-      viewBox={`0 0 ${W} ${H}`}
-      className="w-full"
-      preserveAspectRatio="xMidYMid meet"
-    >
-      <defs>
-        <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#6366f1" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-
-      {/* Grid lines */}
-      {[0, 25, 50, 75, 100].map((tick) => {
-        const y = yScale(tick);
-        if (y < PAD.top || y > H - PAD.bottom) return null;
-        return (
-          <g key={tick}>
-            <line
-              x1={PAD.left}
-              x2={W - PAD.right}
-              y1={y}
-              y2={y}
-              stroke="#334155"
-              strokeWidth="1"
-              strokeDasharray="4 4"
-            />
-            <text x={PAD.left - 6} y={y + 4} textAnchor="end" fill="#64748b" fontSize="10">
-              {tick}
-            </text>
-          </g>
-        );
-      })}
-
-      {/* Area fill */}
-      <path d={areaD} fill="url(#lineGrad)" />
-
-      {/* Line */}
-      <path d={pathD} fill="none" stroke="#818cf8" strokeWidth="2.5" strokeLinejoin="round" />
-
-      {/* Data points */}
-      {history.map((h, i) => (
-        <g key={h._id}>
-          <circle
-            cx={xScale(i)}
-            cy={yScale(h.compositeScore)}
-            r="5"
-            fill={classColor(h.readinessClassification)}
-            stroke="#0f172a"
-            strokeWidth="2"
-          />
-          {/* X-axis label */}
-          <text
-            x={xScale(i)}
-            y={H - PAD.bottom + 16}
-            textAnchor="middle"
-            fill="#64748b"
-            fontSize="9"
-          >
-            {new Date(h.timestamp).toLocaleDateString("en-IN", {
-              day: "numeric",
-              month: "short",
-            })}
-          </text>
-        </g>
-      ))}
-    </svg>
+  // Sort chronological (oldest first for line graph)
+  const sorted = [...history].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );
-}
 
-// ─── Score Slider ─────────────────────────────────────────────────────────────
-function ScoreSlider({
-  label,
-  scoreKey,
-  value,
-  onChange,
-}: {
-  label: string;
-  scoreKey: keyof Scores;
-  value: number;
-  onChange: (key: keyof Scores, val: number) => void;
-}) {
-  const color =
-    value >= 75 ? "text-emerald-400" : value >= 50 ? "text-violet-400" : "text-amber-400";
+  const minVal = 0;
+  const maxVal = 100;
 
-  return (
-    <div className="space-y-2">
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-slate-300 font-medium">{label}</span>
-        <span className={`text-sm font-mono font-bold ${color}`}>{value}</span>
-      </div>
-      <input
-        type="range"
-        min="0"
-        max="100"
-        value={value}
-        onChange={(e) => onChange(scoreKey, Number(e.target.value))}
-        className="w-full accent-indigo-500 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer"
-      />
-    </div>
-  );
-}
+  const getX = (i: number) => PAD.left + (i / (sorted.length - 1)) * (W - PAD.left - PAD.right);
+  const getY = (val: number) => H - PAD.bottom - ((val - minVal) / (maxVal - minVal)) * (H - PAD.top - PAD.bottom);
 
-// ─── Roadmap Grid ─────────────────────────────────────────────────────────────
-function RoadmapGrid({ roadmap }: { roadmap: Roadmap }) {
-  const sections: {
-    key: keyof Roadmap;
-    icon: React.ReactNode;
-    title: string;
-    accent: string;
-  }[] = [
-    {
-      key: "technologies",
-      icon: <Code2 className="w-4 h-4" />,
-      title: "Technologies to Master",
-      accent: "border-indigo-500/30 bg-indigo-500/5",
-    },
-    {
-      key: "projects",
-      icon: <FolderOpen className="w-4 h-4" />,
-      title: "Build These Projects",
-      accent: "border-violet-500/30 bg-violet-500/5",
-    },
-    {
-      key: "certifications",
-      icon: <BadgeCheck className="w-4 h-4" />,
-      title: "Earn Certifications",
-      accent: "border-emerald-500/30 bg-emerald-500/5",
-    },
-    {
-      key: "interviewTopics",
-      icon: <MessageSquare className="w-4 h-4" />,
-      title: "Interview Focus Areas",
-      accent: "border-amber-500/30 bg-amber-500/5",
-    },
-  ];
-
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      {sections.map(({ key, icon, title, accent }) => (
-        <motion.div
-          key={key}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className={`rounded-xl border p-4 ${accent}`}
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-slate-400">{icon}</span>
-            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-              {title}
-            </span>
-          </div>
-          <ul className="space-y-2">
-            {roadmap[key].map((item, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                <ChevronRight className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-slate-500" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </motion.div>
-      ))}
-    </div>
-  );
-}
-
-// ─── Evaluation Weakness Cards ────────────────────────────────────────────────
-function EvaluationBreakdown({ evaluation }: { evaluation: Evaluation }) {
-  const sections = [
-    {
-      title: "Weak Technical Areas",
-      items: evaluation.weakTechnicalAreas,
-      color: "text-red-400",
-      bg: "bg-red-500/5 border-red-500/20",
-    },
-    {
-      title: "Communication Gaps",
-      items: evaluation.communicationGaps,
-      color: "text-amber-400",
-      bg: "bg-amber-500/5 border-amber-500/20",
-    },
-    {
-      title: "Missing Industry Skills",
-      items: evaluation.missingIndustrySkills,
-      color: "text-orange-400",
-      bg: "bg-orange-500/5 border-orange-500/20",
-    },
-  ];
-
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      {sections.map(({ title, items, color, bg }) => (
-        <motion.div
-          key={title}
-          initial={{ opacity: 0, scale: 0.97 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className={`rounded-xl border p-4 ${bg}`}
-        >
-          <p className={`text-xs font-bold uppercase tracking-widest mb-3 ${color}`}>{title}</p>
-          <ul className="space-y-1.5">
-            {items.map((item, i) => (
-              <li key={i} className="text-sm text-slate-300 flex items-start gap-1.5">
-                <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${color.replace("text-", "bg-")}`} />
-                {item}
-              </li>
-            ))}
-          </ul>
-        </motion.div>
-      ))}
-    </div>
-  );
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
-export default function PlacementReadinessPage() {
-  const router = useRouter();
-  const [isAuthorized, setIsAuthorized] = useState(false);
-
-  useEffect(() => {
-    const isLoggedIn = localStorage.getItem("isLoggedIn");
-    if (!isLoggedIn) {
-      router.push("/login");
-    } else {
-      setIsAuthorized(true);
-    }
-  }, [router]);
-
-  const [candidateType, setCandidateType] = useState<CandidateType>("fresher");
-  const [scores, setScores] = useState<Scores>({
-    resumeScore: 60,
-    interviewScore: 55,
-    technicalSkillScore: 65,
-    communicationScore: 58,
+  // Build SVG Path
+  let d = "";
+  sorted.forEach((p, i) => {
+    const x = getX(i);
+    const y = getY(p.compositeScore);
+    if (i === 0) d += `M ${x} ${y}`;
+    else d += ` L ${x} ${y}`;
   });
-  const [loading, setLoading] = useState(false);
+
+  return (
+    <div className="w-full overflow-x-auto scrollbar-none">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[600px] h-auto select-none">
+        {/* Grid Lines */}
+        {[0, 25, 50, 75, 100].map((grid) => {
+          const y = getY(grid);
+          return (
+            <g key={grid} className="opacity-20">
+              <line x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke="#475569" strokeDasharray="3,3" strokeWidth={1} />
+              <text x={PAD.left - 10} y={y + 4} fill="#94a3b8" fontSize={10} textAnchor="end" className="font-mono">
+                {grid}%
+              </text>
+            </g>
+          );
+        })}
+
+        {/* X Axis labels */}
+        {sorted.map((p, i) => {
+          const x = getX(i);
+          const date = new Date(p.timestamp).toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          });
+          return (
+            <text
+              key={p._id || i}
+              x={x}
+              y={H - 12}
+              fill="#64748b"
+              fontSize={9}
+              textAnchor="middle"
+              className="font-mono opacity-80"
+              transform={`rotate(-15, ${x}, ${H - 12})`}
+            >
+              {date}
+            </text>
+          );
+        })}
+
+        {/* Line Path */}
+        <path d={d} fill="none" stroke="url(#line-glow)" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+
+        {/* Gradient Definition */}
+        <defs>
+          <linearGradient id="line-glow" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#06b6d4" />
+            <stop offset="50%" stopColor="#3b82f6" />
+            <stop offset="100%" stopColor="#6366f1" />
+          </linearGradient>
+        </defs>
+
+        {/* Interactive Dots */}
+        {sorted.map((p, i) => {
+          const x = getX(i);
+          const y = getY(p.compositeScore);
+          return (
+            <g key={p._id || i} className="group cursor-pointer">
+              <circle cx={x} cy={y} r={6} fill="#020617" stroke="#06b6d4" strokeWidth={2.5} className="transition-all duration-200 group-hover:r-8" />
+              <circle cx={x} cy={y} r={2} fill="#22d3ee" />
+              {/* Tooltip on hover */}
+              <g className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                <rect x={x - 30} y={y - 32} width={60} height={20} rx={4} fill="#0f172a" stroke="#334155" strokeWidth={1} />
+                <text x={x} y={y - 19} fill="#fff" fontSize={9} fontWeight="bold" textAnchor="middle" className="font-mono">
+                  Score: {p.compositeScore}
+                </text>
+              </g>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+export default function PlacementReadinessEngine() {
+  const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Session & Authentication
+  const [user, setUser] = useState<any>(null);
+  const [token, setToken] = useState<string>("");
+  const [userId, setUserId] = useState<string>("000000000000000000000000");
+
+  // Input states
+  const [candidateType, setCandidateType] = useState<CandidateType>("fresher");
+  const [resumeText, setResumeText] = useState<string>("");
+  const [isDragActive, setIsDragActive] = useState<boolean>(false);
+  const [isParsing, setIsParsing] = useState<boolean>(false);
+  const [parseError, setParseError] = useState<string | null>(null);
+
+  // Skill Assessment sliders (0-100)
+  const [skillTechnical, setSkillTechnical] = useState<number>(65);
+  const [skillDomain, setSkillDomain] = useState<number>(60);
+  const [skillAptitude, setSkillAptitude] = useState<number>(70);
+  const [skillHR, setSkillHR] = useState<number>(65);
+
+  // Extracted entities preview
+  const [extractedTechs, setExtractedTechs] = useState<string[]>([]);
+  const [extractedProjects, setExtractedProjects] = useState<string[]>([]);
+  const [resumeScore, setResumeScore] = useState<number>(0);
+
+  // Result state
   const [result, setResult] = useState<EvaluationResult | null>(null);
   const [history, setHistory] = useState<HistoryPoint[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("evaluate");
 
-  const compositeScore =
-    (scores.resumeScore +
-      scores.interviewScore +
-      scores.technicalSkillScore +
-      scores.communicationScore) /
-    4;
+  useEffect(() => {
+    const authUser = getAuthUser();
+    if (!authUser) {
+      router.push("/");
+      return;
+    }
+    setUser(authUser);
+    setToken(authUser.token || "");
+    const uid = authUser.id || authUser._id || "000000000000000000000000";
+    setUserId(uid);
 
-  const handleScoreChange = (key: keyof Scores, val: number) => {
-    setScores((prev) => ({ ...prev, [key]: val }));
-  };
+    // Load initial aggregates and history
+    fetchHistory(uid, authUser.token || "");
+  }, [router]);
 
-  const fetchHistory = async () => {
+  const fetchHistory = async (uid: string, tokenVal: string) => {
     try {
-      const userId = getAuthUserId();
-      const res = await fetch(`${API_BASE}/history/${userId}`, {
-        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      const res = await fetch(`${API_BASE}/history/${uid}`, {
+        headers: { Authorization: `Bearer ${tokenVal}` },
       });
-      const json = await res.json();
-      if (json.success && json.data?.history) setHistory(json.data.history);
-    } catch {
-      // Silent — history is supplementary
+      const payload = await res.json();
+      if (res.ok && payload.success) {
+        setHistory(payload.data);
+      }
+    } catch (err) {
+      console.error("Failed to load evaluation history:", err);
     }
   };
 
-  useEffect(() => {
-    fetchHistory();
-  }, []);
+  // ─── File Drag & Drop Handlers ──────────────────────────────────────────────
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setIsDragActive(true);
+    } else if (e.type === "dragleave") {
+      setIsDragActive(false);
+    }
+  };
 
-  if (!isAuthorized) {
-    return null;
-  }
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+    setParseError(null);
 
-  const handleSubmit = async () => {
-    setLoading(true);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      await processUploadedFile(file);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setParseError(null);
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      await processUploadedFile(file);
+    }
+  };
+
+  const processUploadedFile = async (file: File) => {
+    if (
+      file.type !== "application/pdf" &&
+      !file.name.toLowerCase().endsWith(".pdf") &&
+      file.type !== "text/plain" &&
+      !file.name.toLowerCase().endsWith(".txt")
+    ) {
+      setParseError("Invalid format. Please upload a PDF or plain text (.txt) file.");
+      return;
+    }
+
+    setIsParsing(true);
+    setParseError(null);
+    try {
+      if (file.name.toLowerCase().endsWith(".pdf")) {
+        // Real PDF binary upload to server endpoint
+        const formData = new FormData();
+        formData.append("resume", file);
+        formData.append("userId", userId);
+
+        const res = await fetch(`${API_BASE}/resume/upload`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        });
+
+        const payload = await res.json();
+        if (res.ok && payload.success) {
+          const data = payload.data;
+          setResumeText(data.extractedText || "");
+          setExtractedTechs(data.technologies || []);
+          setExtractedProjects(data.projects || []);
+          setResumeScore(data.resumeScore || 0);
+        } else {
+          setParseError(payload.message || "Failed to parse PDF resume.");
+        }
+      } else {
+        // Read text file locally
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const text = (event.target?.result as string) || "";
+          setResumeText(text);
+          // Call resume text parser endpoint
+          const res = await fetch(`${API_BASE}/resume`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ resumeText: text, userId }),
+          });
+          const payload = await res.json();
+          if (res.ok && payload.success) {
+            const data = payload.data;
+            setExtractedTechs(data.technologies || []);
+            setExtractedProjects(data.projects || []);
+            setResumeScore(data.resumeScore || 0);
+          } else {
+            setParseError(payload.message || "Failed to parse resume text.");
+          }
+        };
+        reader.readAsText(file);
+      }
+    } catch (err) {
+      setParseError("Error communicating with resume parser server.");
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  // ─── Parse Resume Action (Manual submission) ──────────────────────────────
+  const handleParseResume = async () => {
+    if (!resumeText.trim() || resumeText.trim().length < 20) {
+      setParseError("Please type, paste, or upload resume text first (min 20 characters).");
+      return;
+    }
+
+    setIsParsing(true);
+    setParseError(null);
+    try {
+      const res = await fetch(`${API_BASE}/resume`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ resumeText, userId }),
+      });
+
+      const payload = await res.json();
+      if (res.ok && payload.success) {
+        const data = payload.data;
+        setExtractedTechs(data.technologies || []);
+        setExtractedProjects(data.projects || []);
+        setResumeScore(data.resumeScore || 0);
+      } else {
+        setParseError(payload.message || "Failed to extract entities from resume.");
+      }
+    } catch (err) {
+      setParseError("Network error connecting to resume parser.");
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  // ─── Evaluate Readiness Action ──────────────────────────────────────────────
+  const handleEvaluate = async () => {
+    setIsLoading(true);
     setError(null);
     try {
-      const userId = getAuthUserId();
-      const token = getAuthToken();
       const res = await fetch(`${API_BASE}/evaluate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           userId,
           candidateType,
+          resumeText,
           skillScores: {
-            technical: scores.technicalSkillScore,
-            communication: scores.communicationScore,
-            aptitude: Math.round((scores.technicalSkillScore + scores.communicationScore) / 2),
+            technical: skillTechnical,
+            domain: skillDomain,
+            aptitude: skillAptitude,
+            hr: skillHR,
           },
-          scores,
         }),
       });
-      const json = await res.json();
-      if (!json.success) throw new Error(json.message || "Evaluation failed.");
-      setResult(json.data);
-      setActiveTab("results");
-      await fetchHistory();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+
+      const payload = await res.json();
+      if (res.ok && payload.success) {
+        setResult(payload.data);
+        // Refresh history graph
+        fetchHistory(userId, token);
+      } else {
+        setError(payload.message || "Readiness calculation failed.");
+      }
+    } catch (err) {
+      setError("Network timeout communicating with evaluation nodes.");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const classConfig = result
-    ? CLASSIFICATION_CONFIG[result.readinessClassification]
-    : null;
+  const glassStyle = {
+    backdropFilter: "blur(20px)",
+    background: "rgba(255, 255, 255, 0.04)",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
+  };
+
+  const config = result ? CLASSIFICATION_CONFIG[result.readinessClassification] : null;
 
   return (
-    <div 
-      className="relative min-h-screen text-slate-100 overflow-x-hidden"
-      style={{
-        background: "linear-gradient(160deg, #030718ee 0%, #060d2ecc 40%, #0a0a35dd 100%)",
-      }}
-    >
+    <div className="min-h-screen bg-[#020205] text-slate-100 flex relative overflow-hidden select-none">
+      
       {/* ─── PERSISTENT BACKGROUND IMAGE OVERLAY ─── */}
       <div
-        className="absolute inset-0 pointer-events-none z-0"
+        className="fixed inset-0 pointer-events-none z-0"
         style={{
           backgroundImage: "url('/image_c13234.jpg')",
           backgroundSize: "cover",
@@ -513,387 +510,440 @@ export default function PlacementReadinessPage() {
         }}
       />
 
-      {/* Scifi scanline overlay */}
-      <div 
-        className="absolute inset-0 pointer-events-none opacity-[0.025] z-[1]"
+      {/* ─── SIGNATURE GRADIENT OVERLAY ─── */}
+      <div
+        className="fixed inset-0 pointer-events-none z-0"
+        style={{
+          background: "linear-gradient(160deg, #030718ee 0%, #060d2ecc 40%, #0a0a35dd 100%)",
+        }}
+      />
+
+      {/* ─── SCIFI SCANLINE OVERLAY ─── */}
+      <div
+        className="fixed inset-0 pointer-events-none z-0 opacity-[0.02]"
         style={{
           backgroundImage: "linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%)",
-          backgroundSize: "100% 4px"
+          backgroundSize: "100% 4px",
         }}
       />
 
-      {/* Background grid texture */}
-      <div
-        className="pointer-events-none absolute inset-0 z-[2]"
-        style={{
-          backgroundImage:
-            "radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99,102,241,0.12) 0%, transparent 70%), linear-gradient(rgba(30,41,59,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(30,41,59,0.4) 1px, transparent 1px)",
-          backgroundSize: "auto, 48px 48px, 48px 48px",
-        }}
-      />
+      {/* ─── GLOW DECORS ─── */}
+      <div className="absolute top-10 right-1/4 w-[500px] h-[500px] bg-cyan-950/10 rounded-full blur-[120px] pointer-events-none z-0" />
+      <div className="absolute bottom-10 left-1/4 w-[500px] h-[500px] bg-indigo-950/10 rounded-full blur-[120px] pointer-events-none z-0" />
 
-      <div className="relative z-10 max-w-5xl mx-auto px-4 py-12">
-        {/* ── Header ─────────────────────────────────────────────────────── */}
-        <motion.div
-          initial={{ opacity: 0, y: -16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="mb-10"
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <div className="p-2 rounded-lg bg-indigo-500/15 border border-indigo-500/25">
-              <BrainCircuit className="w-5 h-5 text-indigo-400" />
+      {/* ─── MAIN PORTAL WRAPPER ─── */}
+      <div className="w-full max-w-7xl mx-auto px-4 py-8 relative z-10 flex flex-col min-h-screen">
+        
+        {/* Top Navigation HUD Bar */}
+        <header className="flex justify-between items-center mb-8 border-b border-slate-800/40 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-cyan-500/10 border border-cyan-500/20 rounded-lg flex items-center justify-center">
+              <BrainCircuit className="w-5 h-5 text-cyan-400" />
             </div>
-            <span className="text-xs font-semibold tracking-widest uppercase text-indigo-400">
-              AI Placement Engine
-            </span>
+            <div>
+              <h1 className="text-xl font-bold uppercase tracking-wider text-white">Placement Readiness Dashboard</h1>
+              <p className="text-[10px] text-cyan-400/70 font-mono">INTEGRATED MULTI-MODAL EVALUATOR v2.0</p>
+            </div>
           </div>
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-br from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-            Placement Readiness Dashboard
-          </h1>
-          <p className="mt-2 text-slate-400 text-sm max-w-xl">
-            Enter your current performance metrics. The AI evaluates your readiness, identifies
-            gaps, and builds a personalised action roadmap.
-          </p>
-        </motion.div>
+          
+          <nav className="flex items-center gap-6">
+            <LinkNav href="/home">🏠 Home</LinkNav>
+            <LinkNav href="/recruiter">🚀 Recruiter</LinkNav>
+            <LinkNav href="/arena">🎮 Peer Arena</LinkNav>
+            <LinkNav href="/interview">🎤 Interview</LinkNav>
+            <LinkNav href="/placement" active>📊 Placement</LinkNav>
+          </nav>
+        </header>
 
-        {/* ── Tabs ───────────────────────────────────────────────────────── */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="bg-slate-900/70 border border-slate-800 mb-6">
-            <TabsTrigger value="evaluate" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400">
-              <Target className="w-3.5 h-3.5 mr-1.5" />
-              Evaluate
-            </TabsTrigger>
-            <TabsTrigger value="results" disabled={!result} className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400">
-              <Zap className="w-3.5 h-3.5 mr-1.5" />
-              Results
-            </TabsTrigger>
-            <TabsTrigger value="history" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-slate-400">
-              <TrendingUp className="w-3.5 h-3.5 mr-1.5" />
-              History
-            </TabsTrigger>
-          </TabsList>
-
-          {/* ── EVALUATE TAB ───────────────────────────────────────────── */}
-          <TabsContent value="evaluate">
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35 }}
-              className="grid grid-cols-1 md:grid-cols-3 gap-6"
-            >
-              {/* Profile selector */}
-              <Card className="bg-slate-900/60 border-slate-800 col-span-1">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                    <Award className="w-4 h-4 text-indigo-400" />
-                    Candidate Profile
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-5">
-                  <Select
-                    value={candidateType}
-                    onValueChange={(v) => setCandidateType(v as CandidateType)}
-                  >
-                    <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700">
-                      {Object.entries(CANDIDATE_LABELS).map(([k, label]) => (
-                        <SelectItem key={k} value={k} className="text-slate-200">
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  {/* Live composite preview */}
-                  <div className="rounded-lg bg-slate-800/60 border border-slate-700 p-4 text-center">
-                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">
-                      Composite Score
-                    </p>
-                    <p
-                      className={`text-5xl font-black font-mono tabular-nums ${
-                        compositeScore >= 75
-                          ? "text-emerald-400"
-                          : compositeScore >= 50
-                          ? "text-violet-400"
-                          : "text-amber-400"
-                      }`}
-                    >
-                      {compositeScore.toFixed(0)}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">/ 100</p>
-                  </div>
-
-                  <div className="text-xs text-slate-500 leading-relaxed">
-                    {candidateType === "fresher" &&
-                      "Foundational guidance with 3–6 month roadmap."}
-                    {candidateType === "internship_seeker" &&
-                      "Execution timelines and open-source strategy."}
-                    {candidateType === "experienced" &&
-                      "Architecture, leadership, and senior-track positioning."}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Score sliders */}
-              <Card className="bg-slate-900/60 border-slate-800 col-span-1 md:col-span-2">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4 text-indigo-400" />
-                    Performance Scores
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-5">
-                  {(Object.keys(SCORE_LABELS) as (keyof Scores)[]).map((key) => (
-                    <ScoreSlider
-                      key={key}
-                      label={SCORE_LABELS[key]}
-                      scoreKey={key}
-                      value={scores[key]}
-                      onChange={handleScoreChange}
-                    />
-                  ))}
-
-                  {error && (
-                    <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-                      {error}
-                    </p>
-                  )}
-
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={loading}
-                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Evaluating with AI…
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-4 h-4 mr-2" />
-                        Run Placement Evaluation
-                      </>
-                    )}
-                  </Button>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </TabsContent>
-
-          {/* ── RESULTS TAB ────────────────────────────────────────────── */}
-          <TabsContent value="results">
-            <AnimatePresence mode="wait">
-              {result && classConfig && (
-                <motion.div
-                  key={result._id}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.4 }}
-                  className="space-y-6"
-                >
-                  {/* Classification badge hero */}
-                  <div
-                    className={`relative rounded-2xl border ${classConfig.ring} bg-slate-900/80 shadow-xl ${classConfig.glow} p-6 flex flex-col sm:flex-row items-center gap-6`}
-                  >
-                    {/* Glow pulse */}
-                    <div
-                      className={`absolute -top-px left-1/2 -translate-x-1/2 h-px w-40 ${classConfig.dot.replace("bg-", "bg-gradient-to-r from-transparent via-")} to-transparent`}
-                    />
-
-                    <div className="text-center sm:text-left flex-1">
-                      <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">
-                        Readiness Classification
-                      </p>
-                      <span
-                        className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-lg font-bold ${classConfig.label}`}
+        {/* CORE WORKSPACE GRID */}
+        <div className="grid grid-span-12 lg:grid-cols-12 gap-8 items-start">
+          
+          {/* LEFT: TELEMETRY INPUTS CONTROL SHEET (5 Cols) */}
+          <div className="lg:col-span-5 flex flex-col gap-6">
+            
+            <Card style={glassStyle} className="shadow-lg">
+              <CardHeader className="pb-3 border-b border-slate-800/30">
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+                  <Target className="w-4 h-4" /> 1. Configure Clearance Profile
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-4">
+                <div>
+                  <label className="text-[11px] font-mono text-slate-400 uppercase block mb-2">Candidate Tracking Track</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(Object.keys(CANDIDATE_LABELS) as CandidateType[]).map((track) => (
+                      <button
+                        key={track}
+                        onClick={() => setCandidateType(track)}
+                        className={`py-2 px-3 text-center rounded text-xs font-mono transition-all duration-200 border ${
+                          candidateType === track
+                            ? "bg-cyan-500/15 border-cyan-400 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.1)]"
+                            : "bg-slate-950/40 border-slate-800 hover:border-slate-700 text-slate-400"
+                        }`}
                       >
-                        <span className={`w-2 h-2 rounded-full ${classConfig.dot}`} />
-                        {result.readinessClassification}
-                      </span>
-                      <p className="mt-2 text-slate-400 text-sm">
-                        {CANDIDATE_LABELS[result.candidateType]} ·{" "}
-                        {new Date(result.timestamp).toLocaleDateString("en-IN", {
-                          day: "numeric",
-                          month: "long",
-                          year: "numeric",
-                        })}
-                      </p>
-                    </div>
-
-                    {/* Score ring */}
-                    <div className="flex-shrink-0 text-center">
-                      <p className="text-xs text-slate-500 mb-1 uppercase tracking-wider">
-                        Composite
-                      </p>
-                      <p className={`text-6xl font-black font-mono ${classConfig.color}`}>
-                        {result.compositeScore}
-                      </p>
-                      <p className="text-xs text-slate-500">/ 100</p>
-                    </div>
-
-                    {/* Per-score pills */}
-                    <div className="flex flex-wrap gap-2 sm:flex-col">
-                      {(Object.entries(result.scores) as [keyof Scores, number][]).map(
-                        ([key, val]) => (
-                          <div
-                            key={key}
-                            className="flex items-center gap-2 bg-slate-800/60 rounded-lg px-3 py-1.5"
-                          >
-                            <span className="text-xs text-slate-400 w-24">
-                              {SCORE_LABELS[key]}
-                            </span>
-                            <span className="text-xs font-mono font-bold text-slate-200">
-                              {val}
-                            </span>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Evaluation breakdown */}
-                  <div>
-                    <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
-                      Gap Analysis
-                    </h2>
-                    <EvaluationBreakdown evaluation={result.evaluation} />
-                  </div>
-
-                  {/* Roadmap */}
-                  <div>
-                    <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
-                      Personalised Roadmap
-                    </h2>
-                    <RoadmapGrid roadmap={result.personalizedRoadmap} />
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </TabsContent>
-
-          {/* ── HISTORY TAB ────────────────────────────────────────────── */}
-          <TabsContent value="history">
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35 }}
-              className="space-y-6"
-            >
-              <Card className="bg-slate-900/60 border-slate-800">
-                <CardHeader>
-                  <CardTitle className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-indigo-400" />
-                    Composite Score Trend
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <HistoryChart history={history} />
-                  {/* Legend */}
-                  <div className="flex gap-4 mt-3 flex-wrap">
-                    {(
-                      Object.entries(CLASSIFICATION_CONFIG) as [
-                        Classification,
-                        (typeof CLASSIFICATION_CONFIG)[Classification]
-                      ][]
-                    ).map(([cls, cfg]) => (
-                      <div key={cls} className="flex items-center gap-1.5 text-xs text-slate-400">
-                        <span className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
-                        {cls}
-                      </div>
+                        {CANDIDATE_LABELS[track]}
+                      </button>
                     ))}
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </CardContent>
+            </Card>
 
-              {/* History table */}
-              {history.length > 0 && (
-                <Card className="bg-slate-900/60 border-slate-800">
-                  <CardHeader>
-                    <CardTitle className="text-sm font-semibold text-slate-300">
-                      Submission Log
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-800">
-                            {["Date", "Type", "Resume", "Interview", "Technical", "Comms", "Composite", "Status"].map(
-                              (h) => (
-                                <th
-                                  key={h}
-                                  className="text-left py-2 pr-4 text-xs font-semibold uppercase tracking-wider text-slate-500"
-                                >
-                                  {h}
-                                </th>
-                              )
-                            )}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {[...history].reverse().map((row) => {
-                            const cfg = CLASSIFICATION_CONFIG[row.readinessClassification];
-                            return (
-                              <tr
-                                key={row._id}
-                                className="border-b border-slate-800/60 hover:bg-slate-800/30 transition-colors"
-                              >
-                                <td className="py-2.5 pr-4 text-slate-400 whitespace-nowrap">
-                                  {new Date(row.timestamp).toLocaleDateString("en-IN", {
-                                    day: "numeric",
-                                    month: "short",
-                                    year: "2-digit",
-                                  })}
-                                </td>
-                                <td className="py-2.5 pr-4 text-slate-300 capitalize">
-                                  {CANDIDATE_LABELS[row.candidateType]}
-                                </td>
-                                <td className="py-2.5 pr-4 text-slate-300 font-mono">
-                                  {row.scores.resumeScore}
-                                </td>
-                                <td className="py-2.5 pr-4 text-slate-300 font-mono">
-                                  {row.scores.interviewScore}
-                                </td>
-                                <td className="py-2.5 pr-4 text-slate-300 font-mono">
-                                  {row.scores.technicalSkillScore}
-                                </td>
-                                <td className="py-2.5 pr-4 text-slate-300 font-mono">
-                                  {row.scores.communicationScore}
-                                </td>
-                                <td className={`py-2.5 pr-4 font-mono font-bold ${cfg.color}`}>
-                                  {row.compositeScore}
-                                </td>
-                                <td className="py-2.5">
-                                  <Badge
-                                    className={`text-xs border ${cfg.label} font-medium`}
-                                  >
-                                    {row.readinessClassification}
-                                  </Badge>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+            <Card style={glassStyle} className="shadow-lg">
+              <CardHeader className="pb-3 border-b border-slate-800/30">
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+                  <FileText className="w-4 h-4" /> 2. Resume PDF/TXT Dropzone
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-4">
+                
+                {/* Drag Drop dropzone */}
+                <div
+                  onDragEnter={handleDrag}
+                  onDragOver={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-all duration-250 ${
+                    isDragActive
+                      ? "border-cyan-400 bg-cyan-950/10 shadow-[0_0_15px_rgba(6,182,212,0.15)]"
+                      : "border-slate-800 bg-slate-950/20 hover:border-slate-700"
+                  }`}
+                >
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    className="hidden"
+                    accept=".txt,.pdf"
+                  />
+                  <UploadCloud className="w-8 h-8 text-cyan-400/70 mx-auto mb-2" />
+                  <p className="text-xs text-slate-300 font-mono">Drag & Drop Resume PDF/TXT or click to browse</p>
+                  <p className="text-[10px] text-slate-500 mt-1 font-mono">Files are securely parsed on Express API Nodes</p>
+                </div>
+
+                <div className="relative">
+                  <textarea
+                    value={resumeText}
+                    onChange={(e) => setResumeText(e.target.value)}
+                    placeholder="Alternatively, paste raw resume text credentials here directly..."
+                    className="w-full h-32 bg-slate-950/40 border border-slate-800 rounded p-3 text-xs font-mono text-slate-300 focus:outline-none focus:border-cyan-500/50 resize-none"
+                  />
+                  {resumeText && (
+                    <span className="absolute bottom-2 right-2 text-[9px] text-slate-500 font-mono">
+                      {resumeText.split(/\s+/).length} words
+                    </span>
+                  )}
+                </div>
+
+                {parseError && (
+                  <div className="p-2 border border-red-500/20 bg-red-500/5 rounded flex items-center gap-2 text-red-400 text-xs font-mono">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>{parseError}</span>
+                  </div>
+                )}
+
+                <Button
+                  onClick={handleParseResume}
+                  disabled={isParsing || !resumeText.trim()}
+                  className="w-full bg-cyan-950/40 border border-cyan-500/30 hover:bg-cyan-500/10 text-cyan-400 font-mono text-xs"
+                >
+                  {isParsing ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> Processing Extraction...
+                    </>
+                  ) : (
+                    "Extract Entities & Score Resume"
+                  )}
+                </Button>
+
+                {/* Resume Entity Tags Preview */}
+                {extractedTechs.length > 0 && (
+                  <div className="space-y-3 pt-2 border-t border-slate-800/30">
+                    <div>
+                      <span className="text-[10px] font-mono text-slate-400 uppercase block mb-1.5">Extracted Techs</span>
+                      <div className="flex flex-wrap gap-1">
+                        {extractedTechs.slice(0, 10).map((tech, idx) => (
+                          <span key={idx} className="bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[9px] px-1.5 py-0.5 rounded font-mono">
+                            {tech}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                    {extractedProjects.length > 0 && (
+                      <div>
+                        <span className="text-[10px] font-mono text-slate-400 uppercase block mb-1">Identified Projects</span>
+                        <ul className="text-[9px] font-mono text-slate-400 space-y-1 list-disc pl-4">
+                           {extractedProjects.slice(0, 3).map((proj, idx) => (
+                            <li key={idx} className="truncate">{proj}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center text-xs font-mono bg-cyan-950/10 p-2 border border-cyan-500/15 rounded">
+                      <span className="text-slate-400">Extracted Resume Strength:</span>
+                      <span className="text-cyan-400 font-bold">{resumeScore}/100</span>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-              {history.length === 0 && (
-                <div className="text-center py-16 text-slate-500 text-sm">
-                  No evaluation history yet. Run your first evaluation to start tracking.
+            <Card style={glassStyle} className="shadow-lg">
+              <CardHeader className="pb-3 border-b border-slate-800/30">
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+                  <Code2 className="w-4 h-4" /> 3. Skill Assessment Sliders
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-5">
+                {[
+                  { label: "Technical Core", val: skillTechnical, set: setSkillTechnical },
+                  { label: "Domain Awareness", val: skillDomain, set: setSkillDomain },
+                  { label: "Aptitude & Logic", val: skillAptitude, set: setSkillAptitude },
+                  { label: "HR & Behavioral", val: skillHR, set: setSkillHR },
+                ].map((s, idx) => (
+                  <div key={idx} className="space-y-2">
+                    <div className="flex justify-between items-center text-xs font-mono">
+                      <span className="text-slate-400">{s.label}</span>
+                      <span className="text-cyan-400 font-bold">{s.val}%</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={s.val}
+                        onChange={(e) => s.set(parseInt(e.target.value))}
+                        className="w-full h-1.5 bg-slate-950 border border-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Button
+              size="lg"
+              onClick={handleEvaluate}
+              disabled={isLoading}
+              className="w-full bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-mono text-sm tracking-wider uppercase py-4 shadow-[0_0_30px_rgba(6,182,212,0.25)] transition-all duration-300"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" /> Syncing Multi-Modal Telemetry...
+                </>
+              ) : (
+                "Run Placement Evaluation"
+              )}
+            </Button>
+
+            {error && (
+              <div className="p-3 border border-red-500/20 bg-red-500/5 rounded flex items-start gap-2.5 text-red-400 text-xs font-mono">
+                <ShieldAlert className="w-4 h-4 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT: ANALYTICS SHEET CANVAS & ROADMAP (7 Cols) */}
+          <div className="lg:col-span-7 flex flex-col gap-6">
+            
+            <AnimatePresence mode="wait">
+              {result ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-6"
+                >
+                  
+                  {/* Results Metric Panel */}
+                  <Card style={glassStyle} className="shadow-lg relative overflow-hidden">
+                    {/* Glowing highlight indicator */}
+                    <div className={`absolute top-0 left-0 w-1.5 h-full ${config?.color.replace("text-", "bg-")}`} />
+                    <CardHeader className="pb-3 border-b border-slate-800/30">
+                      <div className="flex justify-between items-center">
+                        <CardTitle className="text-sm font-bold uppercase tracking-wider text-white">Evaluation Results Canvas</CardTitle>
+                        <Badge className={`${config?.label} border text-[10px] font-mono px-2 py-0.5 rounded`}>
+                          {result.readinessClassification}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                      
+                      {/* Radial Progress Ring */}
+                      <div className="md:col-span-5 flex flex-col items-center justify-center">
+                        <div className="relative w-36 h-36 flex items-center justify-center">
+                          <svg className="w-full h-full transform -rotate-90">
+                            <circle cx="72" cy="72" r="62" fill="transparent" stroke="rgba(255, 255, 255, 0.02)" strokeWidth="8" />
+                            <circle
+                              cx="72"
+                              cy="72"
+                              r="62"
+                              fill="transparent"
+                              stroke="url(#progress-gradient)"
+                              strokeWidth="8"
+                              strokeDasharray={389.5}
+                              strokeDashoffset={389.5 - (389.5 * result.compositeScore) / 100}
+                              strokeLinecap="round"
+                              className="transition-all duration-1000 ease-out"
+                            />
+                            <defs>
+                              <linearGradient id="progress-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stopColor="#22d3ee" />
+                                <stop offset="100%" stopColor="#6366f1" />
+                              </linearGradient>
+                            </defs>
+                          </svg>
+                          <div className="absolute flex flex-col items-center justify-center text-center">
+                            <span className="text-4xl font-extrabold text-white tracking-tighter">{result.compositeScore}</span>
+                            <span className="text-[10px] text-slate-500 font-mono uppercase tracking-wider mt-0.5">Readiness</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Score Breakdown Bars */}
+                      <div className="md:col-span-7 space-y-4">
+                        {(Object.keys(SCORE_LABELS) as Array<keyof Scores>).map((key, idx) => {
+                          const val = result.scores[key] || 0;
+                          return (
+                            <div key={idx} className="space-y-1.5">
+                              <div className="flex justify-between items-center text-[11px] font-mono">
+                                <span className="text-slate-400">{SCORE_LABELS[key]}</span>
+                                <span className="text-white font-bold">{val}%</span>
+                              </div>
+                              <div className="w-full h-2 bg-slate-950 border border-slate-800/80 rounded-full overflow-hidden">
+                                <motion.div
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${val}%` }}
+                                  transition={{ duration: 0.8, delay: idx * 0.1 }}
+                                  className="h-full bg-gradient-to-r from-cyan-500 to-indigo-500 rounded-full"
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                    </CardContent>
+                  </Card>
+
+                  {/* Weak areas vs Communication Gaps Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Card style={glassStyle} className="shadow-lg">
+                      <CardHeader className="pb-2 border-b border-slate-800/30">
+                        <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 text-amber-500" /> Weak Technical Areas
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-4">
+                        <div className="flex flex-wrap gap-1.5">
+                          {result.evaluation.weakTechnicalAreas.map((area, idx) => (
+                            <span key={idx} className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] px-2 py-0.5 rounded font-mono">
+                              {area}
+                            </span>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card style={glassStyle} className="shadow-lg">
+                      <CardHeader className="pb-2 border-b border-slate-800/30">
+                        <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                          <MessageSquare className="w-3.5 h-3.5 text-cyan-400" /> Communication Gaps
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-4">
+                        <div className="flex flex-wrap gap-1.5">
+                          {result.evaluation.communicationGaps.map((gap, idx) => (
+                            <span key={idx} className="bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-[10px] px-2 py-0.5 rounded font-mono">
+                              {gap}
+                            </span>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Programmatic Roadmap Cards */}
+                  <Card style={glassStyle} className="shadow-lg">
+                    <CardHeader className="pb-3 border-b border-slate-800/30">
+                      <CardTitle className="text-sm font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+                        <Award className="w-4 h-4" /> Personalized Roadmap Matrix
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {[
+                          { title: "Target Technologies", icon: "💻", items: result.personalizedRoadmap.technologies },
+                          { title: "Portfolio Projects", icon: "📁", items: result.personalizedRoadmap.projects },
+                          { title: "Target Certifications", icon: "📜", items: result.personalizedRoadmap.certifications },
+                          { title: "Interview Topics", icon: "🎤", items: result.personalizedRoadmap.interviewTopics },
+                        ].map((sect, idx) => (
+                          <div key={idx} className="bg-slate-950/30 border border-slate-800/40 rounded p-3.5 space-y-2">
+                            <span className="text-[11px] font-mono text-slate-300 uppercase tracking-wide flex items-center gap-1.5">
+                              <span>{sect.icon}</span> <span>{sect.title}</span>
+                            </span>
+                            <ul className="text-[10px] font-mono text-slate-400 space-y-1 list-none pl-1">
+                              {sect.items.slice(0, 5).map((item, i) => (
+                                <li key={i} className="flex items-start gap-1.5">
+                                  <ChevronRight className="w-3.5 h-3.5 text-cyan-500 mt-0.5 shrink-0" />
+                                  <span>{item}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                </motion.div>
+              ) : (
+                <div className="h-[400px] border border-slate-800/40 rounded-xl bg-slate-950/20 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
+                  <BrainCircuit className="w-12 h-12 text-slate-700 mb-3 animate-pulse" />
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">Readiness Engine Offline</h3>
+                  <p className="text-xs text-slate-600 max-w-sm mt-1 font-mono">Configure candidate parameters, drag/paste your resume text, and submit the telemetry payload to generate composite score metrics.</p>
                 </div>
               )}
-            </motion.div>
-          </TabsContent>
-        </Tabs>
+            </AnimatePresence>
+
+            {/* History trend timeline */}
+            <Card style={glassStyle} className="shadow-lg">
+              <CardHeader className="pb-3 border-b border-slate-800/30">
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+                  <Clock className="w-4 h-4" /> Evaluation History & Trend Timeline
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <HistoryChart history={history} />
+              </CardContent>
+            </Card>
+
+          </div>
+
+        </div>
+
       </div>
+
     </div>
+  );
+}
+
+// ─── Supplementary Link HUD Navigation component ──────────────────────────────
+function LinkNav({ href, children, active = false }: { href: string; children: React.ReactNode; active?: boolean }) {
+  const router = useRouter();
+  return (
+    <button
+      onClick={() => router.push(href)}
+      className={`text-sm font-medium transition-colors cursor-pointer ${
+        active
+          ? "text-cyan-400 border-b-2 border-cyan-400 pb-1"
+          : "text-white/50 hover:text-white"
+      }`}
+    >
+      {children}
+    </button>
   );
 }

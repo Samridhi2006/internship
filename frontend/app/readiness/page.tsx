@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Slider } from "@/components/ui/slider";
 import {
   BrainCircuit,
   Zap,
@@ -17,13 +16,11 @@ import {
   BadgeCheck,
   MessageSquare,
   Loader2,
-  BarChart3,
   Target,
   ChevronRight,
   UploadCloud,
   FileText,
   AlertCircle,
-  HelpCircle,
   Clock,
   ShieldAlert
 } from "lucide-react";
@@ -161,7 +158,6 @@ function HistoryChart({ history }: { history: HistoryPoint[] }) {
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );
 
-  const scores = sorted.map((h) => h.compositeScore);
   const minVal = 0;
   const maxVal = 100;
 
@@ -346,41 +342,78 @@ export default function PlacementReadinessEngine() {
   };
 
   const processUploadedFile = async (file: File) => {
-    // Only text and PDF supported. For PDF we read layout text via client reader
-    // or perform a textual read. Let's write a robust text reader first.
-    if (file.type !== "text/plain" && !file.name.endsWith(".txt") && file.type !== "application/pdf" && !file.name.endsWith(".pdf")) {
-      setParseError("Invalid format. Please upload a plain text (.txt) or PDF file.");
+    if (
+      file.type !== "application/pdf" &&
+      !file.name.toLowerCase().endsWith(".pdf") &&
+      file.type !== "text/plain" &&
+      !file.name.toLowerCase().endsWith(".txt")
+    ) {
+      setParseError("Invalid format. Please upload a PDF or plain text (.txt) file.");
       return;
     }
 
     setIsParsing(true);
+    setParseError(null);
     try {
-      if (file.name.endsWith(".pdf")) {
-        // PDF parser mock / fallback for client browser binary parsing
-        // We will read metadata or simulate reading layout text securely
+      if (file.name.toLowerCase().endsWith(".pdf")) {
+        // Real PDF binary upload to server endpoint
+        const formData = new FormData();
+        formData.append("resume", file);
+        formData.append("userId", userId);
+
+        const res = await fetch(`${API_BASE}/resume/upload`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        });
+
+        const payload = await res.json();
+        if (res.ok && payload.success) {
+          const data = payload.data;
+          setResumeText(data.extractedText || "");
+          setExtractedTechs(data.technologies || []);
+          setExtractedProjects(data.projects || []);
+          setResumeScore(data.resumeScore || 0);
+        } else {
+          setParseError(payload.message || "Failed to parse PDF resume.");
+        }
+      } else {
+        // Read text file locally
         const reader = new FileReader();
         reader.onload = async (event) => {
-          const text = event.target?.result as string;
-          // Simulate binary PDF content mapping or fallback text mapping
-          setResumeText(`[PDF Document: ${file.name}]\n\nCandidate Skills & Experience Summary:\n- Full stack software development\n- JavaScript, React, Node.js, TypeScript\n- Experienced building REST APIs, MongoDB databases, microservices\n- Agile methodologies, Git version control, Unit testing\n- Completed system architecture design tasks\n\nProjects:\n- Developed a cloud-hosted e-commerce portal with CI/CD\n- Built an adaptive real-time messaging pipeline`);
-          setIsParsing(false);
-        };
-        reader.readAsText(file);
-      } else {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          setResumeText((event.target?.result as string) || "");
-          setIsParsing(false);
+          const text = (event.target?.result as string) || "";
+          setResumeText(text);
+          // Call resume text parser endpoint
+          const res = await fetch(`${API_BASE}/resume`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ resumeText: text, userId }),
+          });
+          const payload = await res.json();
+          if (res.ok && payload.success) {
+            const data = payload.data;
+            setExtractedTechs(data.technologies || []);
+            setExtractedProjects(data.projects || []);
+            setResumeScore(data.resumeScore || 0);
+          } else {
+            setParseError(payload.message || "Failed to parse resume text.");
+          }
         };
         reader.readAsText(file);
       }
     } catch (err) {
-      setParseError("Error reading file content. Please type or paste your resume instead.");
+      setParseError("Error communicating with resume parser server.");
+    } finally {
       setIsParsing(false);
     }
   };
 
-  // ─── Parse Resume Action ────────────────────────────────────────────────────
+  // ─── Parse Resume Action (Manual submission) ──────────────────────────────
   const handleParseResume = async () => {
     if (!resumeText.trim() || resumeText.trim().length < 20) {
       setParseError("Please type, paste, or upload resume text first (min 20 characters).");
@@ -473,7 +506,7 @@ export default function PlacementReadinessEngine() {
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
-          opacity: 0.15,
+          opacity: 0.18,
         }}
       />
 
@@ -508,17 +541,18 @@ export default function PlacementReadinessEngine() {
               <BrainCircuit className="w-5 h-5 text-cyan-400" />
             </div>
             <div>
-              <h1 className="text-xl font-bold uppercase tracking-wider text-white">AI Placement Readiness Engine</h1>
+              <h1 className="text-xl font-bold uppercase tracking-wider text-white">Placement Readiness Dashboard</h1>
               <p className="text-[10px] text-cyan-400/70 font-mono">INTEGRATED MULTI-MODAL EVALUATOR v2.0</p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            className="border-slate-800 hover:bg-slate-900 text-xs font-mono"
-            onClick={() => router.push("/home")}
-          >
-            ← Return HUD
-          </Button>
+          
+          <nav className="flex items-center gap-6">
+            <LinkNav href="/home">🏠 Home</LinkNav>
+            <LinkNav href="/recruiter">🚀 Recruiter</LinkNav>
+            <LinkNav href="/arena">🎮 Peer Arena</LinkNav>
+            <LinkNav href="/interview">🎤 Interview</LinkNav>
+            <LinkNav href="/placement" active>📊 Placement</LinkNav>
+          </nav>
         </header>
 
         {/* CORE WORKSPACE GRID */}
@@ -558,7 +592,7 @@ export default function PlacementReadinessEngine() {
             <Card style={glassStyle} className="shadow-lg">
               <CardHeader className="pb-3 border-b border-slate-800/30">
                 <CardTitle className="text-sm font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
-                  <FileText className="w-4 h-4" /> 2. Resume Text Extraction
+                  <FileText className="w-4 h-4" /> 2. Resume PDF/TXT Dropzone
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-4 space-y-4">
@@ -585,7 +619,7 @@ export default function PlacementReadinessEngine() {
                   />
                   <UploadCloud className="w-8 h-8 text-cyan-400/70 mx-auto mb-2" />
                   <p className="text-xs text-slate-300 font-mono">Drag & Drop Resume PDF/TXT or click to browse</p>
-                  <p className="text-[10px] text-slate-500 mt-1 font-mono">Files are read locally securely inside client sandbox</p>
+                  <p className="text-[10px] text-slate-500 mt-1 font-mono">Files are securely parsed on Express API Nodes</p>
                 </div>
 
                 <div className="relative">
@@ -640,7 +674,7 @@ export default function PlacementReadinessEngine() {
                       <div>
                         <span className="text-[10px] font-mono text-slate-400 uppercase block mb-1">Identified Projects</span>
                         <ul className="text-[9px] font-mono text-slate-400 space-y-1 list-disc pl-4">
-                          {extractedProjects.slice(0, 3).map((proj, idx) => (
+                           {extractedProjects.slice(0, 3).map((proj, idx) => (
                             <li key={idx} className="truncate">{proj}</li>
                           ))}
                         </ul>
@@ -894,5 +928,22 @@ export default function PlacementReadinessEngine() {
       </div>
 
     </div>
+  );
+}
+
+// ─── Supplementary Link HUD Navigation component ──────────────────────────────
+function LinkNav({ href, children, active = false }: { href: string; children: React.ReactNode; active?: boolean }) {
+  const router = useRouter();
+  return (
+    <button
+      onClick={() => router.push(href)}
+      className={`text-sm font-medium transition-colors cursor-pointer ${
+        active
+          ? "text-cyan-400 border-b-2 border-cyan-400 pb-1"
+          : "text-white/50 hover:text-white"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
