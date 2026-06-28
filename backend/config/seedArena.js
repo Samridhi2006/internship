@@ -2,6 +2,23 @@ import { Challenge } from '../models/Arena.js';
 
 const seedArena = async () => {
   try {
+    // 1. Run in-place migrations to replace pre-solved boilerplates with skeleton stubs
+    const migratedTech = await Challenge.updateMany(
+      { category: 'Technical', boilerplate: { $regex: /split|return/ } },
+      { $set: { boilerplate: `function solution(val) {\n  // Write your code here\n  \n}` } }
+    );
+    if (migratedTech.modifiedCount > 0) {
+      console.log(`⚡ Migrated ${migratedTech.modifiedCount} Technical challenges to use skeleton boilerplates.`);
+    }
+
+    const migratedDomain = await Challenge.updateMany(
+      { category: 'Domain', boilerplate: { $regex: /service-v/ } },
+      { $set: { boilerplate: `function solution(path) {\n  // Write your code here\n  \n}` } }
+    );
+    if (migratedDomain.modifiedCount > 0) {
+      console.log(`⚡ Migrated ${migratedDomain.modifiedCount} Domain challenges to use skeleton boilerplates.`);
+    }
+
     const totalCount = await Challenge.countDocuments();
     console.log(`📊 Current Arena challenge count: ${totalCount}`);
 
@@ -32,7 +49,7 @@ const seedArena = async () => {
               difficulty,
               xpValue,
               problemStatement: `Develop a high-performance JavaScript function solution(val) that evaluates case index ${index}.\n\nSpecifically, if the input is a string, return the string reversed. If the input is a number, return the square of that number. Otherwise, return null.`,
-              boilerplate: `function solution(val) {\n  // Write your code here\n  if (typeof val === 'string') return val.split('').reverse().join('');\n  if (typeof val === 'number') return val * val;\n  return null;\n}`,
+              boilerplate: `function solution(val) {\n  // Write your code here\n  \n}`,
               constraints: [`Input val must be non-null`, `Execution time limit < 1000ms`, `Version parameter: v${index}`],
               testCases: [
                 { input: '"hello"', output: '"olleh"' },
@@ -51,7 +68,7 @@ const seedArena = async () => {
               difficulty,
               xpValue,
               problemStatement: `Determine the correct configuration for service router v${index}.\n\nThe gateway must route /api/v${index}/services directly to service-v${index}. Write a function to check if the route matches.`,
-              boilerplate: `function solution(path) {\n  if (path === "/api/v${index}/services") return "service-v${index}";\n  return "default";\n}`,
+              boilerplate: `function solution(path) {\n  // Write your code here\n  \n}`,
               constraints: [`Gateway configuration version: ${index}`, `Standard YAML API rules apply.`],
               testCases: [
                 { input: `"/api/v${index}/services"`, output: `"service-v${index}"` },
