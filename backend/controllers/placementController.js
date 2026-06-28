@@ -15,9 +15,6 @@
  */
 
 import Groq from "groq-sdk";
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
 import User from "../models/User.js";
 import InterviewSession from "../models/InterviewSession.js";
 import PlacementReadiness from "../models/PlacementReadiness.js";
@@ -791,9 +788,12 @@ export async function parsePdfFile(req, res) {
       });
     }
 
-    // pdf-parse extracts text from the buffer
+    // pdf-parse extracts text from the buffer (dynamic ESM-safe import using createRequire)
     let extractedText = "";
     try {
+      const { createRequire } = await import("module");
+      const require = createRequire(import.meta.url);
+      const pdfParse = require("pdf-parse");
       const pdfData = await pdfParse(req.file.buffer);
       extractedText = (pdfData.text || "").trim();
     } catch (pdfErr) {
