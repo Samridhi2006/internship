@@ -23,7 +23,7 @@ const EvaluationSchema = new mongoose.Schema({
 
 const RecruiterSessionSchema = new mongoose.Schema({
   userId: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: String,
     required: true,
     index: true
   },

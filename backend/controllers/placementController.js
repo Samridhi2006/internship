@@ -15,6 +15,9 @@
  */
 
 import Groq from "groq-sdk";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const pdfParse = require("pdf-parse");
 import User from "../models/User.js";
 import InterviewSession from "../models/InterviewSession.js";
 import PlacementReadiness from "../models/PlacementReadiness.js";
@@ -768,6 +771,80 @@ export async function getSkillDiagnosticsAggregates(req, res) {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch skill diagnostics.",
+      error: err.message,
+    });
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ENDPOINT: POST /api/readiness/resume/upload
+// Accepts multipart PDF binary, extracts text, runs entity extraction
+// Called by frontend drag-drop PDF upload flow (multer middleware injects file)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+export async function parsePdfFile(req, res) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No PDF file uploaded. Send file as multipart/form-data field 'resume'.",
+      });
+    }
+
+    // pdf-parse extracts text from the buffer
+    let extractedText = "";
+    try {
+      const pdfData = await pdfParse(req.file.buffer);
+      extractedText = (pdfData.text || "").trim();
+    } catch (pdfErr) {
+      console.error("[parsePdfFile] pdf-parse error:", pdfErr.message);
+      return res.status(422).json({
+        success: false,
+        message: "Could not extract text from the uploaded PDF. Please ensure the PDF is text-based (not a scanned image).",
+      });
+    }
+
+    if (!extractedText || extractedText.length < 20) {
+      return res.status(422).json({
+        success: false,
+        message: "Extracted PDF text is too short or empty. The PDF may be image-scanned or password-protected.",
+      });
+    }
+
+    // Run entity extraction (same pipeline as text endpoint)
+    let entities = await extractEntitiesGroq(extractedText);
+    if (!entities) {
+      entities = extractEntitiesRegex(extractedText);
+    }
+
+    const userId = req.body?.userId || null;
+    if (userId) {
+      await pushSecurityLog(userId, "RESUME_PDF_PARSED", {
+        action: "pdf_binary_entity_extraction",
+        filename: req.file.originalname || "resume.pdf",
+        textLength: extractedText.length,
+        technologiesFound: entities.technologies.length,
+        resumeScore: entities.resumeScore,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "PDF parsed and entities extracted successfully.",
+      data: {
+        extractedText: extractedText.slice(0, 8000),
+        technologies: entities.technologies,
+        projects: entities.projects,
+        missingSkills: entities.missingSkills,
+        resumeScore: entities.resumeScore,
+        wordCount: extractedText.split(/\s+/).filter(Boolean).length,
+      },
+    });
+  } catch (err) {
+    console.error("[parsePdfFile] Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "PDF parsing failed due to a server error.",
       error: err.message,
     });
   }
