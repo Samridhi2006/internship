@@ -116,7 +116,7 @@ export default function EntryLoginPage() {
         });
       } catch (proxyErr) {
         console.warn("Relative proxy fetch failed, attempting absolute server URL fallback...", proxyErr);
-        res = await fetch("http://localhost:4000/api/auth/login", {
+        res = await fetch("/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password, role: selectedRole, selectedRole }),
@@ -191,7 +191,7 @@ export default function EntryLoginPage() {
 
       {/* Scifi scanline overlay */}
       <div 
-        className="absolute inset-0 pointer-events-none opacity-[0.025] z-1"
+        className="absolute inset-0 pointer-events-none opacity-[0.025] z-[1]"
         style={{
           backgroundImage: "linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%)",
           backgroundSize: "100% 4px"
@@ -288,7 +288,7 @@ export default function EntryLoginPage() {
           <button 
             type="submit" 
             disabled={loading} 
-            className="w-full py-3.5 mt-2 bg-gradient-to-r from-cyan-500 to-indigo-600 hover:brightness-110 disabled:opacity-50 text-slate-950 font-black uppercase text-xs tracking-widest rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.15)] active:scale-98 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+            className="w-full py-3.5 mt-2 bg-gradient-to-r from-cyan-500 to-indigo-600 hover:brightness-110 disabled:opacity-50 text-slate-950 font-black uppercase text-xs tracking-widest rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.15)] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-1.5"
           >
             {loading ? (
               <span className="inline-flex items-center gap-2 font-mono">

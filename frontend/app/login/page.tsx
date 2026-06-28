@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { FallingPattern } from "@/components/ui/falling-pattern";
 import { KeyRound, User, ChevronRight, Sparkles } from "lucide-react";
 
 export default function LoginPage() {
@@ -47,7 +46,7 @@ export default function LoginPage() {
 
     try {
       // Try logging in
-      let loginRes = await fetch("http://localhost:4000/api/auth/login", {
+      let loginRes = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password: inputPass }),
@@ -58,7 +57,7 @@ export default function LoginPage() {
       // If unauthorized/not found (401), attempt to register user on the fly
       if (loginRes.status === 401 || loginRes.status === 404 || !loginData.success) {
         // Attempt auto-registration
-        const registerRes = await fetch("http://localhost:4000/api/auth/register", {
+        const registerRes = await fetch("/api/auth/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, email, password: registerPass }),
@@ -68,7 +67,7 @@ export default function LoginPage() {
 
         // If registration succeeds, try logging in again
         if (registerRes.ok || registerData.success) {
-          loginRes = await fetch("http://localhost:4000/api/auth/login", {
+          loginRes = await fetch("/api/auth/login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, password: registerPass }),
@@ -85,7 +84,15 @@ export default function LoginPage() {
         const token = loginData.token;
         const candidateName = loginData.user?.name || name;
 
-        // Save authentication state
+        // Save complete authUser object — required by readiness, recruiter, arena pages
+        const authUserPayload = {
+          id: loginData.user?.id || loginData.user?._id || "",
+          name: candidateName,
+          email: loginData.user?.email || email,
+          role: loginData.user?.role || "student",
+          token: token,
+        };
+        localStorage.setItem("authUser", JSON.stringify(authUserPayload));
         localStorage.setItem("token", token);
         localStorage.setItem("candidateId", candidateName);
         localStorage.setItem("isLoggedIn", "true");
@@ -94,7 +101,7 @@ export default function LoginPage() {
         document.cookie = `token=${token}; path=/; max-age=86400`;
 
         // Directs to dashboard
-        router.push("/");
+        router.push("/home");
       } else {
         throw new Error(loginData.message || "Invalid credentials.");
       }
@@ -108,16 +115,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-black text-slate-100 font-sans antialiased relative overflow-hidden flex items-center justify-center px-4">
-      {/* ── Falling Pattern Background ────────────────────────── */}
-      <FallingPattern
-        color="#6366f1"
-        backgroundColor="#000000"
-        duration={120}
-        blurIntensity="0px"
-        density={1.5}
-        className="absolute inset-0 z-0 pointer-events-none opacity-50"
-      />
-
       {/* Radial overlay to dim corners */}
       <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_center,transparent_40%,rgba(0,0,0,0.8)_100%)] pointer-events-none" />
 
@@ -187,7 +184,7 @@ export default function LoginPage() {
               </span>
             ) : (
               <>
-                Let's Go <ChevronRight className="w-4 h-4" />
+                Let&apos;s Go <ChevronRight className="w-4 h-4" />
               </>
             )}
           </button>

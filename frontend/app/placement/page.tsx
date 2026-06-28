@@ -495,10 +495,36 @@ export default function PlacementReadinessPage() {
     : null;
 
   return (
-    <div className="relative min-h-screen bg-[#050810] text-slate-100 overflow-x-hidden">
+    <div 
+      className="relative min-h-screen text-slate-100 overflow-x-hidden"
+      style={{
+        background: "linear-gradient(160deg, #030718ee 0%, #060d2ecc 40%, #0a0a35dd 100%)",
+      }}
+    >
+      {/* ─── PERSISTENT BACKGROUND IMAGE OVERLAY ─── */}
+      <div
+        className="absolute inset-0 pointer-events-none z-0"
+        style={{
+          backgroundImage: "url('/image_c13234.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          opacity: 0.18,
+        }}
+      />
+
+      {/* Scifi scanline overlay */}
+      <div 
+        className="absolute inset-0 pointer-events-none opacity-[0.025] z-[1]"
+        style={{
+          backgroundImage: "linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%)",
+          backgroundSize: "100% 4px"
+        }}
+      />
+
       {/* Background grid texture */}
       <div
-        className="pointer-events-none absolute inset-0 z-0"
+        className="pointer-events-none absolute inset-0 z-[2]"
         style={{
           backgroundImage:
             "radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99,102,241,0.12) 0%, transparent 70%), linear-gradient(rgba(30,41,59,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(30,41,59,0.4) 1px, transparent 1px)",
