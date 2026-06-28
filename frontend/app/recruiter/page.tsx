@@ -536,7 +536,18 @@ export default function RecruiterSimulatorPage() {
   const [error, setError] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const API = 'http://localhost:5000/api/recruiter';
+  const API = '/api/recruiter';
+
+  const getRecruiterUserId = useCallback(() => {
+    if (typeof window !== "undefined") {
+      const raw = localStorage.getItem("authUser");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return parsed?.id || parsed?._id || "000000000000000000000000";
+      }
+    }
+    return "000000000000000000000000";
+  }, []);
 
   useEffect(() => {
     if (view === 'chat') {
@@ -556,9 +567,10 @@ export default function RecruiterSimulatorPage() {
     if (!selectedCompany || !selectedRole) return;
     setIsStarting(true); setError('');
     try {
+      const currentUserId = getRecruiterUserId();
       const res = await fetch(`${API}/session/start`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: '64f3a2b1c2d4e5f6a7b8c9d0', companyName: selectedCompany, jobRole: selectedRole, difficulty: selectedDifficulty }),
+        body: JSON.stringify({ userId: currentUserId, companyName: selectedCompany, jobRole: selectedRole, difficulty: selectedDifficulty }),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.message);
