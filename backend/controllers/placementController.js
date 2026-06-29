@@ -841,9 +841,11 @@ export async function parsePdfFile(req, res) {
       const { createRequire } = await import("module");
       const require = createRequire(import.meta.url);
       const { PDFParse } = require("pdf-parse");
-      const parser = new PDFParse({ data: req.file.buffer });
+      const parser = new PDFParse({ data: new Uint8Array(req.file.buffer) });
+      await parser.load();
       const pdfData = await parser.getText();
       extractedText = (pdfData.text || "").trim();
+      await parser.destroy();
     } catch (pdfErr) {
       console.error("[parsePdfFile] pdf-parse error:", pdfErr.message);
       return res.status(422).json({
