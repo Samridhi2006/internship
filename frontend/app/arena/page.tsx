@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 // ─── Type Systems ─────────────────────────────────────────────────────────────
@@ -895,36 +894,6 @@ export default function ArenaPage() {
         )}
       </AnimatePresence>
 
-      {/* Header bar and navigation links */}
-      <header className="sticky top-0 z-40 w-full border-b border-white/5 bg-[#02060d]/85 backdrop-blur-md px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-fuchsia-500 to-indigo-600 flex items-center justify-center font-black text-sm text-white shadow-lg shadow-fuchsia-500/20">
-              AI
-            </div>
-            <span className="font-extrabold text-base tracking-tight bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
-              Career Prep Suite
-            </span>
-          </div>
-          <nav className="flex items-center gap-6">
-            <Link href="/" className="text-sm font-medium text-white/50 hover:text-white transition-colors">
-              🏠 Home
-            </Link>
-            <Link href="/recruiter" className="text-sm font-medium text-white/50 hover:text-fuchsia-400 transition-colors">
-              🚀 Recruiter
-            </Link>
-            <Link href="/arena" className="text-sm font-semibold text-white border-b-2 border-cyan-400 transition-colors">
-              🎮 Peer Arena
-            </Link>
-            <Link href="/interview" className="text-sm font-medium text-white/50 hover:text-indigo-400 transition-colors">
-              🎤 Interview
-            </Link>
-            <Link href="/placement" className="text-sm font-medium text-white/50 hover:text-cyan-400 transition-colors">
-              📊 Placement
-            </Link>
-          </nav>
-        </div>
-      </header>
 
       {/* Primary container */}
       <div className="relative z-10 max-w-[1600px] mx-auto px-6 py-12">

@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 type Company = 'Google' | 'Amazon' | 'Microsoft' | 'TCS' | 'Infosys' | 'Startup';
@@ -626,37 +625,6 @@ export default function RecruiterSimulatorPage() {
   if (view === 'select') {
     return (
       <div className="min-h-screen bg-[#06060F] text-white overflow-x-hidden" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
-        {/* Sticky Global Navigation Header */}
-        <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-[#07070F]/80 backdrop-blur-md px-6 py-4">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-fuchsia-500 to-indigo-600 flex items-center justify-center font-black text-sm text-white shadow-lg shadow-fuchsia-500/20">
-                AI
-              </div>
-              <span className="font-extrabold text-base tracking-tight text-white">
-                Career Prep Suite
-              </span>
-            </div>
-            
-            <nav className="flex items-center gap-6">
-              <Link href="/" className="text-sm font-medium text-white/50 hover:text-white transition-colors">
-                🏠 Home
-              </Link>
-              <Link href="/recruiter" className="text-sm font-semibold text-white border-b-2 border-fuchsia-500 pb-1 px-1 transition-colors">
-                🚀 Recruiter
-              </Link>
-              <Link href="/arena" className="text-sm font-medium text-white/50 hover:text-cyan-400 transition-colors">
-                🎮 Peer Arena
-              </Link>
-              <Link href="/interview" className="text-sm font-medium text-white/50 hover:text-indigo-400 transition-colors">
-                🎤 Interview
-              </Link>
-              <Link href="/placement" className="text-sm font-medium text-white/50 hover:text-cyan-400 transition-colors">
-                📊 Placement
-              </Link>
-            </nav>
-          </div>
-        </header>
 
         {/* ── Hero Banner ── */}
         <div className="relative overflow-hidden" style={{ minHeight: 260, background: 'linear-gradient(135deg, #0a0a1f 0%, #0d0d28 40%, #070714 100%)' }}>

@@ -559,26 +559,16 @@ export default function PlacementReadinessEngine() {
       {/* ─── MAIN PORTAL WRAPPER ─── */}
       <div className="w-full max-w-7xl mx-auto px-4 py-8 relative z-10 flex flex-col min-h-screen">
         
-        {/* Top Navigation HUD Bar */}
-        <header className="flex justify-between items-center mb-8 border-b border-slate-800/40 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-cyan-500/10 border border-cyan-500/20 rounded-lg flex items-center justify-center">
-              <BrainCircuit className="w-5 h-5 text-cyan-400" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold uppercase tracking-wider text-white">Placement Readiness Dashboard</h1>
-              <p className="text-[10px] text-cyan-400/70 font-mono">INTEGRATED MULTI-MODAL EVALUATOR v2.0</p>
-            </div>
+        {/* Page Title Section */}
+        <div className="flex items-center gap-3 mb-8 border-b border-slate-800/40 pb-4">
+          <div className="w-10 h-10 bg-cyan-500/10 border border-cyan-500/20 rounded-lg flex items-center justify-center">
+            <BrainCircuit className="w-5 h-5 text-cyan-400" />
           </div>
-          
-          <nav className="flex items-center gap-6">
-            <LinkNav href="/home">🏠 Home</LinkNav>
-            <LinkNav href="/recruiter">🚀 Recruiter</LinkNav>
-            <LinkNav href="/arena">🎮 Peer Arena</LinkNav>
-            <LinkNav href="/interview">🎤 Interview</LinkNav>
-            <LinkNav href="/placement" active>📊 Placement</LinkNav>
-          </nav>
-        </header>
+          <div>
+            <h1 className="text-xl font-bold uppercase tracking-wider text-white">Placement Readiness Dashboard</h1>
+            <p className="text-[10px] text-cyan-400/70 font-mono">INTEGRATED MULTI-MODAL EVALUATOR v2.0</p>
+          </div>
+        </div>
 
         {/* CORE WORKSPACE GRID */}
         <div className="grid grid-span-12 lg:grid-cols-12 gap-8 items-start">
@@ -969,22 +959,5 @@ export default function PlacementReadinessEngine() {
       </div>
 
     </div>
-  );
-}
-
-// ─── Supplementary Link HUD Navigation component ──────────────────────────────
-function LinkNav({ href, children, active = false }: { href: string; children: React.ReactNode; active?: boolean }) {
-  const router = useRouter();
-  return (
-    <button
-      onClick={() => router.push(href)}
-      className={`text-sm font-medium transition-colors cursor-pointer ${
-        active
-          ? "text-cyan-400 border-b-2 border-cyan-400 pb-1"
-          : "text-white/50 hover:text-white"
-      }`}
-    >
-      {children}
-    </button>
   );
 }
