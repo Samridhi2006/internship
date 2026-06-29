@@ -88,6 +88,88 @@ function classifyCandidate(compositeScore) {
   return "Needs Improvement";
 }
 
+// ─── Helper: Derive skill assessment scores from resume content ──────────────
+
+const TECHNICAL_KEYWORDS = [
+  "javascript", "typescript", "python", "java", "c++", "c#", "go", "rust", "ruby", "php",
+  "swift", "kotlin", "react", "angular", "vue", "next.js", "node.js", "express",
+  "django", "flask", "spring", "html", "css", "tailwind", "sass", "graphql",
+  "rest", "api", "microservices", "serverless", "data structures", "algorithms",
+  "design patterns", "solid principles", "oop", "functional programming",
+  "unit testing", "integration testing", "test driven development",
+];
+
+const DOMAIN_KEYWORDS = [
+  "mongodb", "postgresql", "mysql", "redis", "firebase", "dynamodb", "elasticsearch",
+  "docker", "kubernetes", "aws", "azure", "gcp", "terraform", "jenkins",
+  "github actions", "ci/cd", "cloud", "devops", "system design", "database design",
+  "api design", "architecture", "networking", "security", "load balancing",
+  "caching", "monitoring", "logging", "infrastructure",
+];
+
+const APTITUDE_KEYWORDS = [
+  "algorithms", "data structures", "problem solving", "competitive programming",
+  "mathematics", "statistics", "machine learning", "deep learning", "analytics",
+  "optimization", "research", "analysis", "quantitative", "logic",
+  "tensorflow", "pytorch", "pandas", "numpy", "scikit-learn", "sql",
+  "big data", "data science", "artificial intelligence",
+];
+
+const HR_KEYWORDS = [
+  "team", "leadership", "communication", "collaboration", "agile", "scrum",
+  "mentoring", "management", "presentation", "documentation", "client",
+  "stakeholder", "cross-functional", "interpersonal", "negotiation",
+  "conflict resolution", "public speaking", "volunteering", "community",
+  "initiative", "organized", "responsible", "adaptable", "creative",
+];
+
+function computeSkillScoresFromResume(resumeText, technologies = [], projects = [], missingSkills = []) {
+  const lower = (resumeText || "").toLowerCase();
+  const wordCount = lower.split(/\s+/).filter(Boolean).length;
+
+  // Technical Score: based on programming languages, frameworks, dev practices
+  const techMatches = TECHNICAL_KEYWORDS.filter((kw) => lower.includes(kw));
+  let technical = 30;
+  technical += Math.min(40, techMatches.length * 5);
+  if (projects.length >= 3) technical += 15;
+  else if (projects.length >= 1) technical += 8;
+  if (wordCount >= 200) technical += 10;
+  else if (wordCount >= 100) technical += 5;
+  technical = Math.min(100, Math.max(0, technical));
+
+  // Domain Score: based on infrastructure, cloud, databases, architecture
+  const domainMatches = DOMAIN_KEYWORDS.filter((kw) => lower.includes(kw));
+  let domain = 25;
+  domain += Math.min(45, domainMatches.length * 6);
+  if (/deploy|production|staging|devops|pipeline/i.test(lower)) domain += 10;
+  if (wordCount >= 250) domain += 10;
+  else if (wordCount >= 100) domain += 5;
+  domain = Math.min(100, Math.max(0, domain));
+
+  // Aptitude Score: based on analytical, algorithmic, data science keywords
+  const aptitudeMatches = APTITUDE_KEYWORDS.filter((kw) => lower.includes(kw));
+  let aptitude = 35;
+  aptitude += Math.min(40, aptitudeMatches.length * 6);
+  if (/gpa|cgpa|rank|topper|merit|honors|distinction/i.test(lower)) aptitude += 10;
+  if (/certification|certified|course|training|bootcamp/i.test(lower)) aptitude += 10;
+  aptitude = Math.min(100, Math.max(0, aptitude));
+
+  // HR Score: based on soft skills, leadership, communication keywords
+  const hrMatches = HR_KEYWORDS.filter((kw) => lower.includes(kw));
+  let hr = 30;
+  hr += Math.min(40, hrMatches.length * 6);
+  if (/intern|internship|experience|years|worked at|employed/i.test(lower)) hr += 10;
+  if (/volunteer|community|hackathon|event|club|society/i.test(lower)) hr += 10;
+  hr = Math.min(100, Math.max(0, hr));
+
+  return {
+    technical: Math.round(technical),
+    domain: Math.round(domain),
+    aptitude: Math.round(aptitude),
+    hr: Math.round(hr),
+  };
+}
+
 // ─── Helper: Fetch live interview metrics for a user ─────────────────────────
 
 async function fetchInterviewMetrics(userId) {
@@ -485,6 +567,11 @@ export async function parseResume(req, res) {
       });
     }
 
+    // Derive skill assessment scores from resume content
+    const skillScores = computeSkillScoresFromResume(
+      trimmedText, entities.technologies, entities.projects, entities.missingSkills
+    );
+
     return res.status(200).json({
       success: true,
       message: "Resume parsed successfully.",
@@ -493,6 +580,7 @@ export async function parseResume(req, res) {
         projects: entities.projects,
         missingSkills: entities.missingSkills,
         resumeScore: entities.resumeScore,
+        skillScores,
       },
     });
   } catch (err) {
@@ -878,6 +966,11 @@ export async function parsePdfFile(req, res) {
       });
     }
 
+    // Derive skill assessment scores from resume content
+    const skillScores = computeSkillScoresFromResume(
+      extractedText, entities.technologies, entities.projects, entities.missingSkills
+    );
+
     return res.status(200).json({
       success: true,
       message: "PDF parsed and entities extracted successfully.",
@@ -887,6 +980,7 @@ export async function parsePdfFile(req, res) {
         projects: entities.projects,
         missingSkills: entities.missingSkills,
         resumeScore: entities.resumeScore,
+        skillScores,
         wordCount: extractedText.split(/\s+/).filter(Boolean).length,
       },
     });

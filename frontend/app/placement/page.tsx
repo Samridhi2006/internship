@@ -269,6 +269,7 @@ export default function PlacementReadinessEngine() {
   const [skillDomain, setSkillDomain] = useState<number>(60);
   const [skillAptitude, setSkillAptitude] = useState<number>(70);
   const [skillHR, setSkillHR] = useState<number>(65);
+  const [skillsAutoDetected, setSkillsAutoDetected] = useState<boolean>(false);
 
   // Extracted entities preview
   const [extractedTechs, setExtractedTechs] = useState<string[]>([]);
@@ -376,6 +377,14 @@ export default function PlacementReadinessEngine() {
           setExtractedTechs(data.technologies || []);
           setExtractedProjects(data.projects || []);
           setResumeScore(data.resumeScore || 0);
+          // Auto-populate skill sliders from resume analysis
+          if (data.skillScores) {
+            setSkillTechnical(data.skillScores.technical ?? 65);
+            setSkillDomain(data.skillScores.domain ?? 60);
+            setSkillAptitude(data.skillScores.aptitude ?? 70);
+            setSkillHR(data.skillScores.hr ?? 65);
+            setSkillsAutoDetected(true);
+          }
         } else {
           setParseError(payload.message || "Failed to parse PDF resume.");
         }
@@ -400,6 +409,14 @@ export default function PlacementReadinessEngine() {
             setExtractedTechs(data.technologies || []);
             setExtractedProjects(data.projects || []);
             setResumeScore(data.resumeScore || 0);
+            // Auto-populate skill sliders from resume analysis
+            if (data.skillScores) {
+              setSkillTechnical(data.skillScores.technical ?? 65);
+              setSkillDomain(data.skillScores.domain ?? 60);
+              setSkillAptitude(data.skillScores.aptitude ?? 70);
+              setSkillHR(data.skillScores.hr ?? 65);
+              setSkillsAutoDetected(true);
+            }
           } else {
             setParseError(payload.message || "Failed to parse resume text.");
           }
@@ -438,6 +455,14 @@ export default function PlacementReadinessEngine() {
         setExtractedTechs(data.technologies || []);
         setExtractedProjects(data.projects || []);
         setResumeScore(data.resumeScore || 0);
+        // Auto-populate skill sliders from resume analysis
+        if (data.skillScores) {
+          setSkillTechnical(data.skillScores.technical ?? 65);
+          setSkillDomain(data.skillScores.domain ?? 60);
+          setSkillAptitude(data.skillScores.aptitude ?? 70);
+          setSkillHR(data.skillScores.hr ?? 65);
+          setSkillsAutoDetected(true);
+        }
       } else {
         setParseError(payload.message || "Failed to extract entities from resume.");
       }
@@ -692,10 +717,20 @@ export default function PlacementReadinessEngine() {
             <Card style={glassStyle} className="shadow-lg">
               <CardHeader className="pb-3 border-b border-slate-800/30">
                 <CardTitle className="text-sm font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
-                  <Code2 className="w-4 h-4" /> 3. Skill Assessment Sliders
+                  <Code2 className="w-4 h-4" /> 3. Skill Assessment
+                  {skillsAutoDetected && (
+                    <span className="ml-auto flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2.5 py-0.5 normal-case tracking-normal">
+                      <BadgeCheck className="w-3 h-3" /> Auto-Detected from Resume
+                    </span>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-4 space-y-5">
+                {!skillsAutoDetected && (
+                  <p className="text-[10px] text-slate-500 font-mono mb-1">
+                    Upload your resume above to auto-detect these scores, or adjust manually.
+                  </p>
+                )}
                 {[
                   { label: "Technical Core", val: skillTechnical, set: setSkillTechnical },
                   { label: "Domain Awareness", val: skillDomain, set: setSkillDomain },
@@ -705,20 +740,26 @@ export default function PlacementReadinessEngine() {
                   <div key={idx} className="space-y-2">
                     <div className="flex justify-between items-center text-xs font-mono">
                       <span className="text-slate-400">{s.label}</span>
-                      <span className="text-cyan-400 font-bold">{s.val}%</span>
+                      <span className={`font-bold ${skillsAutoDetected ? 'text-emerald-400' : 'text-cyan-400'}`}>{s.val}%</span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={s.val}
-                        onChange={(e) => s.set(parseInt(e.target.value))}
-                        className="w-full h-1.5 bg-slate-950 border border-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-                      />
+                    <div className="relative w-full">
+                      {/* Progress bar background */}
+                      <div className="w-full h-2 bg-slate-950 border border-slate-800 rounded-full overflow-hidden">
+                        <motion.div
+                          className={`h-full rounded-full ${skillsAutoDetected ? 'bg-gradient-to-r from-emerald-500 to-cyan-400' : 'bg-gradient-to-r from-cyan-600 to-cyan-400'}`}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${s.val}%` }}
+                          transition={{ duration: 0.8, ease: 'easeOut' }}
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
+                {skillsAutoDetected && (
+                  <p className="text-[10px] text-emerald-500/60 font-mono text-center pt-1">
+                    Scores derived from resume keyword analysis & content depth
+                  </p>
+                )}
               </CardContent>
             </Card>
 
